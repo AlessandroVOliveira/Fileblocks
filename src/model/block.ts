@@ -31,6 +31,20 @@ export function pathToId(path: BlockPath): string {
   return JSON.stringify(path);
 }
 
+/** Deepest block whose source range contains the offset (range ends are inclusive, so a cursor right after a value still counts). */
+export function findBlockAt(root: Block | null, offset: number): Block | undefined {
+  const contains = (block: Block) =>
+    block.range !== undefined && offset >= block.range.offset && offset <= block.range.offset + block.range.length;
+  if (!root || !contains(root)) {
+    return undefined;
+  }
+  let current = root;
+  for (let next = current.children?.find(contains); next; next = next.children?.find(contains)) {
+    current = next;
+  }
+  return current;
+}
+
 export function findBlock(root: Block | null, path: BlockPath): Block | undefined {
   let current: Block | undefined = root ?? undefined;
   for (const segment of path) {

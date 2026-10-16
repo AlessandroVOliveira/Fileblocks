@@ -369,3 +369,13 @@ button:focus-visible {
 .row-index:hover {
   text-decoration: underline;
 }
+
+/* ---------- selection (follows the text editor's cursor) ---------- */
+
+.gnode.gnode--selected {
+  box-shadow: 0 0 0 2px var(--vscode-focusBorder), 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.gnode-row.row--selected {
+  box-shadow: inset 0 0 0 1px var(--vscode-focusBorder);
+}

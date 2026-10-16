@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react';
 import type { Block, ScalarValue } from '../../src/model/block';
-import { useActions, useSearchHighlight, type EditorActions, type SearchHighlight } from '../actions';
+import { useActions, useHighlight, type EditorActions, type Highlight } from '../actions';
 import { displayValue, HEADER_HEIGHT, nodeId, nodeTitle, ROW_HEIGHT, summary } from './buildGraph';
 import type { BlockFlowNode } from './layout';
 
@@ -11,16 +11,16 @@ const INTERACTIVE = 'nodrag nopan';
 export function BlockNode({ data }: NodeProps<BlockFlowNode>) {
   const { block, parent, width, height } = data;
   const actions = useActions();
-  const search = useSearchHighlight();
+  const highlight = useHighlight();
   const isContainer = block.children !== undefined;
   const rows = block.children ?? [];
 
   return (
-    <div className={`gnode gnode--${block.kind}`} style={{ width, height }}>
+    <div className={`gnode gnode--${block.kind}${highlight.selectedId === block.id ? ' gnode--selected' : ''}`} style={{ width, height }}>
       {parent && <Handle type="target" position={Position.Left} isConnectable={false} style={{ top: HEADER_HEIGHT / 2 }} />}
 
       <div
-        className={`gnode-header${isContainer && search.matchIds.has(block.id) ? ' gnode-header--match' : ''}`}
+        className={`gnode-header${isContainer && highlight.matchIds.has(block.id) ? ' gnode-header--match' : ''}`}
         style={{ height: HEADER_HEIGHT }}
       >
         <span className="gnode-title" title={`${nodeTitle(block)} · Click to show in text`} onClick={() => reveal(actions, block)}>
@@ -41,7 +41,7 @@ export function BlockNode({ data }: NodeProps<BlockFlowNode>) {
       </div>
 
       {!isContainer && (
-        <div className={`gnode-row ${INTERACTIVE}${matchClass(search, block)}`} style={{ height: ROW_HEIGHT }}>
+        <div className={`gnode-row ${INTERACTIVE}${matchClass(highlight, block)}`} style={{ height: ROW_HEIGHT }}>
           <ScalarInput block={block} />
         </div>
       )}
@@ -68,7 +68,7 @@ let dragSource: DragSource | undefined;
 
 function Row({ child, node, index }: { child: Block; node: Block; index: number }) {
   const actions = useActions();
-  const search = useSearchHighlight();
+  const highlight = useHighlight();
   const isContainer = child.children !== undefined;
   const collapsed = isContainer && actions.isCollapsed(child.id);
   const canRename = node.kind === 'object';
@@ -106,7 +106,7 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
 
   return (
     <div
-      className={`gnode-row ${INTERACTIVE}${matchClass(search, child)}`}
+      className={`gnode-row ${INTERACTIVE}${matchClass(highlight, child)}`}
       style={{ height: ROW_HEIGHT }}
       onKeyDown={onKeyDown}
       onDragOver={onDragOver}
@@ -161,11 +161,15 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
   );
 }
 
-function matchClass(search: SearchHighlight, block: Block): string {
-  if (search.activeId === block.id) {
-    return ' row--match row--active';
+function matchClass(highlight: Highlight, block: Block): string {
+  let classes = '';
+  if (highlight.matchIds.has(block.id)) {
+    classes += highlight.activeId === block.id ? ' row--match row--active' : ' row--match';
   }
-  return search.matchIds.has(block.id) ? ' row--match' : '';
+  if (highlight.selectedId === block.id) {
+    classes += ' row--selected';
+  }
+  return classes;
 }
 
 function ScalarInput({ block }: { block: Block }) {

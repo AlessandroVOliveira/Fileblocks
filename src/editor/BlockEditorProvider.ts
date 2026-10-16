@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { findBlock, type BlockPath } from '../model/block';
+import { findBlock, findBlockAt, type Block, type BlockPath } from '../model/block';
 import type { BlockEdit, HostToWebview, InsertValue, WebviewToHost } from '../model/messages';
 import { getAdapter, type FormatAdapter } from '../parsers';
 import { getWebviewHtml } from './webviewHtml';
@@ -52,12 +52,43 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
       void webview.postMessage(message);
     };
 
+    // Cursor moves are frequent: reuse the parse until the document changes.
+    let parsed: { version: number; root: Block | null } | undefined;
+    const currentRoot = () => {
+      if (parsed?.version !== document.version) {
+        parsed = { version: document.version, root: adapter?.parse(document.getText()).root ?? null };
+      }
+      return parsed.root;
+    };
+
+    const postSelection = (path: BlockPath | null) => {
+      const message: HostToWebview = { type: 'selection', path };
+      void webview.postMessage(message);
+    };
+
+    let selectionTimer: ReturnType<typeof setTimeout> | undefined;
+    const isUserSelection = (kind: vscode.TextEditorSelectionChangeKind | undefined) =>
+      kind === vscode.TextEditorSelectionChangeKind.Keyboard || kind === vscode.TextEditorSelectionChangeKind.Mouse;
+
     const subscriptions = [
       vscode.workspace.onDidChangeTextDocument((e) => {
         if (e.document.uri.toString() === document.uri.toString()) {
           postUpdate();
         }
       }),
+      // Follow the text editor's cursor in the graph. Selections made by the extension itself
+      // (revealing a block) have kind Command and are skipped, so the two never ping-pong.
+      vscode.window.onDidChangeTextEditorSelection((e) => {
+        if (e.textEditor.document.uri.toString() !== document.uri.toString() || !isUserSelection(e.kind)) {
+          return;
+        }
+        clearTimeout(selectionTimer);
+        selectionTimer = setTimeout(() => {
+          const offset = document.offsetAt(e.selections[0].active);
+          postSelection(findBlockAt(currentRoot(), offset)?.path ?? null);
+        }, 75);
+      }),
+      { dispose: () => clearTimeout(selectionTimer) },
       webview.onDidReceiveMessage((message: WebviewToHost) => {
         switch (message.type) {
           case 'ready':
@@ -80,6 +111,7 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
             break;
           case 'reveal':
             if (adapter) {
+              postSelection(message.path);
               void this.revealInText(document, adapter, message.path);
             }
             break;

@@ -19,12 +19,15 @@ export type BlockEdit =
   /** Reorders a block within its parent; `toIndex` is its final position. */
   | { type: 'move'; path: BlockPath; toIndex: number };
 
-export type HostToWebview = {
-  type: 'update';
-  format: string;
-  root: Block | null;
-  errors: ParseError[];
-};
+export type HostToWebview =
+  | {
+      type: 'update';
+      format: string;
+      root: Block | null;
+      errors: ParseError[];
+    }
+  /** The block under the text editor's cursor (null when the cursor is outside every block). */
+  | { type: 'selection'; path: BlockPath | null };
 
 export type WebviewToHost =
   | { type: 'ready' }

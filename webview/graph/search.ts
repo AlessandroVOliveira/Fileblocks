@@ -1,14 +1,8 @@
-import { pathToId, type Block } from '../../src/model/block';
+import type { Block } from '../../src/model/block';
 import { displayValue } from './buildGraph';
+import type { GraphTarget } from './targets';
 
-export interface SearchMatch {
-  /** The block whose key or value matched. */
-  block: Block;
-  /** The card that shows it as a row: its parent, or the block itself for a scalar root. */
-  card: Block;
-  /** Row index of the match inside the card. */
-  row: number;
-}
+export type SearchMatch = GraphTarget;
 
 /**
  * Case-insensitive search over string keys and scalar values, in document order.
@@ -32,10 +26,4 @@ export function findMatches(root: Block, query: string): SearchMatch[] {
 
   visit(root, undefined, 0);
   return matches;
-}
-
-/** Ids that must not be collapsed for the match's card to be on the canvas: the card and its ancestors. */
-export function idsToReveal(match: SearchMatch): string[] {
-  const path = match.card.path;
-  return path.map((_, i) => pathToId(path.slice(0, i + 1)));
 }

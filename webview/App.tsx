@@ -1,11 +1,13 @@
 import { Background, Controls, MiniMap, ReactFlow, useReactFlow } from '@xyflow/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { pathToId, type Block } from '../src/model/block';
 import type { HostToWebview, WebviewToHost } from '../src/model/messages';
-import { ActionsContext, SearchContext, type EditorActions, type SearchHighlight } from './actions';
+import { ActionsContext, HighlightContext, type EditorActions, type Highlight } from './actions';
 import { BlockNode } from './graph/BlockNode';
 import { buildGraph, HEADER_HEIGHT, nodeId, ROW_HEIGHT, type Measure } from './graph/buildGraph';
 import { layoutGraph, type BlockFlowNode } from './graph/layout';
-import { findMatches, idsToReveal } from './graph/search';
+import { findMatches } from './graph/search';
+import { idsToReveal, targetFor, type GraphTarget } from './graph/targets';
 import { SearchBox } from './SearchBox';
 
 export interface VsCodeApi {
@@ -14,29 +16,57 @@ export interface VsCodeApi {
   setState(state: { collapsed: string[] }): void;
 }
 
+type UpdateMessage = Extract<HostToWebview, { type: 'update' }>;
+
+/** A request to bring a block into view: expand its ancestors, then center on its row. */
+interface FocusRequest {
+  target: GraphTarget;
+  /** Leave the viewport alone when the row is already on screen (cursor following). */
+  onlyIfOffscreen: boolean;
+  seq: number;
+}
+
 // Must be stable across renders, or React Flow remounts every node.
 const nodeTypes = { block: BlockNode };
+/** Rows closer than this to the canvas edge count as off screen. */
+const SCREEN_MARGIN = 40;
 
 export function App({ vscode }: { vscode: VsCodeApi }) {
-  const [update, setUpdate] = useState<HostToWebview>();
+  const [update, setUpdate] = useState<UpdateMessage>();
   const [collapsed, setCollapsed] = useState(() => new Set(vscode.getState()?.collapsed ?? []));
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
-  // Bumped whenever the user navigates search results; each value is centered once.
-  const [centerRequest, setCenterRequest] = useState(0);
-  const centeredRequest = useRef(0);
-  const { setCenter, getZoom } = useReactFlow();
+  const [selectedId, setSelectedId] = useState<string>();
+  const [focus, setFocus] = useState<FocusRequest>();
+  const handledFocus = useRef(0);
+  const focusSeq = useRef(0);
+  const root = useRef<Block | null>(null);
+  const canvas = useRef<HTMLDivElement>(null);
+  const { setCenter, getZoom, getViewport } = useReactFlow();
+
+  const requestFocus = useCallback((target: GraphTarget | undefined, onlyIfOffscreen: boolean) => {
+    if (target) {
+      setFocus({ target, onlyIfOffscreen, seq: ++focusSeq.current });
+    }
+  }, []);
 
   useEffect(() => {
     const onMessage = (event: MessageEvent<HostToWebview>) => {
-      if (event.data.type === 'update') {
-        setUpdate(event.data);
+      const message = event.data;
+      if (message.type === 'update') {
+        root.current = message.root;
+        setUpdate(message);
+      } else if (message.type === 'selection') {
+        setSelectedId(message.path ? pathToId(message.path) : undefined);
+        if (message.path && root.current) {
+          requestFocus(targetFor(root.current, message.path), true);
+        }
       }
     };
     window.addEventListener('message', onMessage);
     vscode.postMessage({ type: 'ready' });
     return () => window.removeEventListener('message', onMessage);
-  }, [vscode]);
+  }, [vscode, requestFocus]);
 
   const updateCollapsed = useCallback(
     (change: (next: Set<string>) => boolean) =>
@@ -68,64 +98,85 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
   );
 
   const matches = useMemo(() => (update?.root ? findMatches(update.root, query) : []), [update, query]);
-  const active = matches.length > 0 ? matches[Math.min(activeIndex, matches.length - 1)] : undefined;
+  const activeMatch = matches.length > 0 ? Math.min(activeIndex, matches.length - 1) : -1;
 
-  const highlight = useMemo<SearchHighlight>(
-    () => ({ matchIds: new Set(matches.map((m) => m.block.id)), activeId: active?.block.id }),
-    [matches, active],
+  const highlight = useMemo<Highlight>(
+    () => ({ matchIds: new Set(matches.map((m) => m.block.id)), activeId: matches[activeMatch]?.block.id, selectedId }),
+    [matches, activeMatch, selectedId],
   );
   const matchCards = useMemo(() => new Set(matches.map((m) => nodeId(m.card))), [matches]);
 
   const onQueryChange = (next: string) => {
     setQuery(next);
     setActiveIndex(0);
-    setCenterRequest((n) => n + 1);
+    requestFocus(update?.root ? findMatches(update.root, next)[0] : undefined, false);
   };
 
   const onNavigate = (delta: 1 | -1) => {
     if (matches.length > 0) {
-      setActiveIndex((i) => (Math.min(i, matches.length - 1) + delta + matches.length) % matches.length);
-      setCenterRequest((n) => n + 1);
+      const next = (activeMatch + delta + matches.length) % matches.length;
+      setActiveIndex(next);
+      requestFocus(matches[next], false);
     }
   };
 
-  // A match inside a collapsed subtree has no card on the canvas: expand its ancestors.
+  // A target inside a collapsed subtree has no card on the canvas: expand its ancestors.
   useEffect(() => {
-    if (active && centerRequest !== centeredRequest.current) {
-      const ids = idsToReveal(active);
+    if (focus && focus.seq !== handledFocus.current) {
+      const ids = idsToReveal(focus.target);
       updateCollapsed((next) => ids.map((id) => next.delete(id)).some(Boolean));
     }
-  }, [active, centerRequest, updateCollapsed]);
+  }, [focus, updateCollapsed]);
 
   const { nodes, edges } = useMemo(
     () => (update?.root ? layoutGraph(buildGraph(update.root, (id) => collapsed.has(id), measureText)) : { nodes: [], edges: [] }),
     [update, collapsed],
   );
 
-  // Center on the active match once its card is laid out (possibly after the expansion above).
+  // Center on the target's row once its card is laid out (possibly after the expansion above).
   useEffect(() => {
-    if (!active || centerRequest === centeredRequest.current) {
+    if (!focus || focus.seq === handledFocus.current) {
       return;
     }
-    const card = nodes.find((node) => node.id === nodeId(active.card));
-    if (card) {
-      centeredRequest.current = centerRequest;
-      const x = card.position.x + (card.width ?? 0) / 2;
-      const y = card.position.y + HEADER_HEIGHT + active.row * ROW_HEIGHT + ROW_HEIGHT / 2;
-      void setCenter(x, y, { zoom: Math.max(getZoom(), 0.8), duration: 300 });
+    const card = nodes.find((node) => node.id === nodeId(focus.target.card));
+    if (!card) {
+      return;
     }
-  }, [active, nodes, centerRequest, setCenter, getZoom]);
+    handledFocus.current = focus.seq;
+    const x = card.position.x + (card.width ?? 0) / 2;
+    const y = card.position.y + HEADER_HEIGHT + focus.target.row * ROW_HEIGHT + ROW_HEIGHT / 2;
+    if (focus.onlyIfOffscreen && isOnScreen(x, y)) {
+      return;
+    }
+    void setCenter(x, y, { zoom: Math.max(getZoom(), 0.8), duration: 300 });
+
+    function isOnScreen(flowX: number, flowY: number): boolean {
+      const bounds = canvas.current?.getBoundingClientRect();
+      if (!bounds) {
+        return false;
+      }
+      const { x: panX, y: panY, zoom } = getViewport();
+      const screenX = flowX * zoom + panX;
+      const screenY = flowY * zoom + panY;
+      return (
+        screenX > SCREEN_MARGIN &&
+        screenX < bounds.width - SCREEN_MARGIN &&
+        screenY > SCREEN_MARGIN &&
+        screenY < bounds.height - SCREEN_MARGIN
+      );
+    }
+  }, [focus, nodes, setCenter, getZoom, getViewport]);
 
   return (
     <ActionsContext.Provider value={actions}>
-      <SearchContext.Provider value={highlight}>
+      <HighlightContext.Provider value={highlight}>
         <div className="app">
           <div className="toolbar">
             <span className="format-badge">{(update?.format ?? '').toUpperCase()}</span>
             <SearchBox
               query={query}
               onQueryChange={onQueryChange}
-              current={Math.min(activeIndex, matches.length - 1)}
+              current={activeMatch}
               total={matches.length}
               onNavigate={onNavigate}
             />
@@ -143,7 +194,7 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
               ))}
             </ul>
           )}
-          <div className="canvas">
+          <div className="canvas" ref={canvas}>
             <ReactFlow<BlockFlowNode>
               nodes={nodes}
               edges={edges}
@@ -164,7 +215,7 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
             </ReactFlow>
           </div>
         </div>
-      </SearchContext.Provider>
+      </HighlightContext.Provider>
     </ActionsContext.Provider>
   );
 }
