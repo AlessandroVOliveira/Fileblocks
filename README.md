@@ -1,5 +1,9 @@
 # Fileblocks
 
+[![Install from the VS Code Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-Install-007ACC?logo=visualstudiocode&logoColor=white)](https://marketplace.visualstudio.com/items?itemName=alessandrovoliveira.fileblocks)
+[![Latest release](https://img.shields.io/github/v/release/AlessandroVOliveira/Fileblocks)](https://github.com/AlessandroVOliveira/Fileblocks/releases)
+[![License: MIT](https://img.shields.io/github/license/AlessandroVOliveira/Fileblocks)](LICENSE)
+
 **See and edit structured files as a graph, right inside VS Code.**
 
 Fileblocks opens JSON, YAML, TOML, XML and HTML files as an interactive node graph, in the spirit of
@@ -34,6 +38,16 @@ formatting, comments and layout are preserved, and **Ctrl+Z** undoes anything.
 ![An XML file validated against an XSD](images/xml-xsd.png)
 
 ## Getting started
+
+Install **Fileblocks** from the
+[VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=alessandrovoliveira.fileblocks)
+(or search for "Fileblocks" in the Extensions view), or from the command line:
+
+```sh
+code --install-extension alessandrovoliveira.fileblocks
+```
+
+Then:
 
 1. Open a `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.html` or `.htm` file.
 2. Click the **Open in Block Editor** icon in the editor title bar, or right-click the file in the
