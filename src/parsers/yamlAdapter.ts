@@ -46,6 +46,12 @@ export const yamlAdapter: FormatAdapter = {
     };
   },
 
+  instances(text) {
+    const docs = parseAllDocuments(text);
+    // Each document of a multi-document file is validated on its own (e.g. Kubernetes manifests).
+    return docs.map((doc, i) => ({ prefix: docs.length > 1 ? [i] : [], value: doc.toJS() as unknown }));
+  },
+
   applyEdit(text, edit) {
     const docs = parseAllDocuments(text);
     if (docs.length === 0 || docs.some((doc) => doc.errors.length > 0)) {

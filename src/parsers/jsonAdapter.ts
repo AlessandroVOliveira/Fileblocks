@@ -1,5 +1,6 @@
 import {
   findNodeAtLocation,
+  parse as parseJsonc,
   modify,
   parseTree,
   printParseErrorCode,
@@ -22,6 +23,10 @@ export const jsonAdapter: FormatAdapter = {
       root: tree ? toBlock(tree, [], undefined) : null,
       errors: errors.map((e) => ({ message: printParseErrorCode(e.error), offset: e.offset })),
     };
+  },
+
+  instances(text) {
+    return [{ prefix: [], value: parseJsonc(text, [], { allowTrailingComma: true }) as unknown }];
   },
 
   applyEdit(text, edit) {

@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import { findBlock, findBlockAt, type Block, type BlockPath } from '../model/block';
 import { convertValue, typeOf, type ValueType } from '../model/convert';
-import type { BlockEdit, HostToWebview, InsertValue, WebviewToHost } from '../model/messages';
+import type { BlockEdit, HostToWebview, InsertValue, SchemaInfo, WebviewToHost } from '../model/messages';
 import { getAdapter, type FormatAdapter } from '../parsers';
+import { SchemaService, type LoadedSchema, type SchemaReference } from '../schema/SchemaService';
 import { getWebviewHtml } from './webviewHtml';
 
 interface ValueTypeItem extends vscode.QuickPickItem {
@@ -20,6 +21,13 @@ const VALUE_TYPES: ValueTypeItem[] = [
   { label: 'Array', type: 'array', value: () => [] },
 ];
 
+/** The schema state of one editor: which schema applies, and its load result. */
+interface EditorSchema {
+  reference: SchemaReference;
+  loaded?: LoadedSchema;
+  error?: string;
+}
+
 /** Debounce for re-parsing while the user types in the text editor. */
 const UPDATE_DELAY_MS = 50;
 
@@ -31,14 +39,19 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
   static readonly viewType = 'fileblocks.blockEditor';
 
   static register(context: vscode.ExtensionContext): vscode.Disposable {
-    return vscode.window.registerCustomEditorProvider(
-      BlockEditorProvider.viewType,
-      new BlockEditorProvider(context),
-      { supportsMultipleEditorsPerDocument: true },
+    const schemas = new SchemaService();
+    return vscode.Disposable.from(
+      schemas,
+      vscode.window.registerCustomEditorProvider(BlockEditorProvider.viewType, new BlockEditorProvider(context, schemas), {
+        supportsMultipleEditorsPerDocument: true,
+      }),
     );
   }
 
-  private constructor(private readonly context: vscode.ExtensionContext) {}
+  private constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly schemas: SchemaService,
+  ) {}
 
   resolveCustomTextEditor(document: vscode.TextDocument, panel: vscode.WebviewPanel): void {
     const adapter = getAdapter(document);
@@ -50,11 +63,39 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     };
     webview.html = getWebviewHtml(webview, this.context.extensionUri);
 
+    // JSON Schema for this document: re-located on every update (the file's `$schema` can change),
+    // loaded asynchronously; when loading finishes the graph is updated again.
+    let schema: EditorSchema | undefined;
+    const refreshSchema = (force = false) => {
+      const reference = adapter?.instances ? this.schemas.locate(document, adapter.id) : undefined;
+      if (!force && reference?.uri === schema?.reference.uri) {
+        return;
+      }
+      const current: EditorSchema | undefined = reference && { reference };
+      schema = current;
+      if (!current) {
+        return;
+      }
+      this.schemas.load(current.reference).then(
+        (loaded) => (current.loaded = loaded),
+        (error: unknown) => (current.error = error instanceof Error ? error.message : String(error)),
+      ).finally(() => {
+        if (schema === current) {
+          postUpdate();
+        }
+      });
+    };
+
     const postUpdate = () => {
-      const result = adapter
-        ? adapter.parse(document.getText())
-        : { root: null, errors: [{ message: `Unsupported format: ${document.languageId}` }] };
-      const message: HostToWebview = { type: 'update', format: adapter?.id ?? document.languageId, ...result };
+      refreshSchema();
+      const text = document.getText();
+      const result = adapter ? adapter.parse(text) : { root: null, errors: [{ message: `Unsupported format: ${document.languageId}` }] };
+      const message: HostToWebview = {
+        type: 'update',
+        format: adapter?.id ?? document.languageId,
+        ...result,
+        schema: schema && adapter ? this.schemaInfo(schema, adapter, text, result.root) : undefined,
+      };
       void webview.postMessage(message);
     };
 
@@ -86,6 +127,10 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
         }
       }),
       { dispose: () => clearTimeout(updateTimer) },
+      this.schemas.onDidChange(() => {
+        refreshSchema(true);
+        postUpdate();
+      }),
       // Follow the text editor's cursor in the graph. Selections made by the extension itself
       // (revealing a block) have kind Command and are skipped, so the two never ping-pong.
       vscode.window.onDidChangeTextEditorSelection((e) => {
@@ -111,7 +156,7 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
             break;
           case 'add':
             if (adapter) {
-              void this.promptInsert(document, adapter, message.parentPath);
+              void this.promptInsert(document, adapter, message.parentPath, schema?.loaded);
             }
             break;
           case 'rename':
@@ -140,33 +185,66 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     panel.onDidDispose(() => subscriptions.forEach((d) => d.dispose()));
   }
 
-  private async promptInsert(document: vscode.TextDocument, adapter: FormatAdapter, parentPath: BlockPath): Promise<void> {
-    const parent = findBlock(adapter.parse(document.getText()).root, parentPath);
+  private schemaInfo(
+    schema: EditorSchema,
+    adapter: FormatAdapter,
+    text: string,
+    root: Block | null,
+  ): SchemaInfo {
+    if (schema.loaded) {
+      return this.schemas.info(schema.loaded, adapter, text, root);
+    }
+    const name = decodeURIComponent(schema.reference.uri.split('/').pop() ?? schema.reference.uri);
+    return { name, uri: schema.reference.uri, loading: !schema.error, error: schema.error, problems: [], hints: {} };
+  }
+
+  private async promptInsert(document: vscode.TextDocument, adapter: FormatAdapter, parentPath: BlockPath, schema?: LoadedSchema): Promise<void> {
+    const text = document.getText();
+    const parent = findBlock(adapter.parse(text).root, parentPath);
     if (parent?.kind === 'element' && !parent.readOnly) {
       return this.promptInsertMarkup(document, adapter, parent);
     }
     if ((parent?.kind !== 'object' && parent?.kind !== 'array') || parent.readOnly) {
       return;
     }
+    const title = 'Fileblocks: Add entry';
+    const schemaPath = SchemaService.schemaPath(adapter, text, parentPath);
 
     let key: string | undefined;
     if (parent.kind === 'object') {
       const existing = siblingKeys(parent.children);
-      key = await vscode.window.showInputBox({
-        title: 'Fileblocks: Add entry',
-        prompt: 'Key for the new entry',
-        validateInput: (value) => validateKey(value, existing),
-      });
+      // With a schema, offer the properties it defines (required first) before free typing.
+      const suggestions = schema?.navigator.properties(schemaPath).filter((property) => !existing.includes(property.name)) ?? [];
+      if (suggestions.length > 0) {
+        const items = [
+          ...suggestions.map((s) => ({ label: s.name, description: s.required ? 'required' : undefined, detail: s.description, name: s.name as string | undefined })),
+          { label: '$(edit) Other key…', name: undefined },
+        ];
+        const picked = await vscode.window.showQuickPick(items, { title, placeHolder: 'Property to add', matchOnDetail: true });
+        if (!picked) {
+          return;
+        }
+        key = picked.name;
+      }
       if (key === undefined) {
-        return;
+        key = await vscode.window.showInputBox({ title, prompt: 'Key for the new entry', validateInput: (value) => validateKey(value, existing) });
+        if (key === undefined) {
+          return;
+        }
       }
     }
 
-    const type = await vscode.window.showQuickPick(VALUE_TYPES, { title: 'Fileblocks: Add entry', placeHolder: 'Type of the new value' });
-    if (!type) {
-      return;
+    // The schema's default / enum / type decides the initial value; otherwise ask for a type.
+    const childSegment = parent.kind === 'array' ? (parent.children?.length ?? 0) : key!;
+    let value = schema?.navigator.defaultValue([...schemaPath, childSegment]);
+    if (value === undefined) {
+      const type = await vscode.window.showQuickPick(VALUE_TYPES, { title, placeHolder: 'Type of the new value' });
+      if (!type) {
+        return;
+      }
+      value = type.value();
     }
-    await this.applyEdit(document, adapter, { type: 'insert', parentPath, key, value: type.value() });
+    await this.applyEdit(document, adapter, { type: 'insert', parentPath, key, value });
   }
 
   /** XML/HTML: an element can get a child element, an attribute or text. */

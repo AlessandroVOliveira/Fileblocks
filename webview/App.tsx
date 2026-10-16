@@ -118,10 +118,40 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
   const matches = useMemo(() => (update?.root ? findMatches(update.root, query) : []), [update, query]);
   const activeMatch = matches.length > 0 ? Math.min(activeIndex, matches.length - 1) : -1;
 
+  const schema = update?.schema;
+  const problemsById = useMemo(() => {
+    const byId = new Map<string, string[]>();
+    for (const problem of schema?.problems ?? []) {
+      const id = pathToId(problem.path);
+      byId.set(id, [...(byId.get(id) ?? []), problem.message]);
+    }
+    return byId;
+  }, [schema]);
+
   const highlight = useMemo<Highlight>(
-    () => ({ matchIds: new Set(matches.map((m) => m.block.id)), activeId: matches[activeMatch]?.block.id, selectedId }),
-    [matches, activeMatch, selectedId],
+    () => ({
+      matchIds: new Set(matches.map((m) => m.block.id)),
+      activeId: matches[activeMatch]?.block.id,
+      selectedId,
+      problems: problemsById,
+      hints: schema?.hints ?? {},
+    }),
+    [matches, activeMatch, selectedId, problemsById, schema],
   );
+
+  // Cycles through schema problems: selects the block and brings it into view.
+  const problemIndex = useRef(-1);
+  const goToNextProblem = () => {
+    const problems = schema?.problems ?? [];
+    if (problems.length === 0 || !update?.root) {
+      return;
+    }
+    problemIndex.current = (problemIndex.current + 1) % problems.length;
+    const { path } = problems[problemIndex.current];
+    setSelectedId(pathToId(path));
+    // A "not allowed" property exists, but fall back to the parent if the block is gone.
+    requestFocus(targetFor(update.root, path) ?? targetFor(update.root, path.slice(0, -1)), false);
+  };
   const matchCards = useMemo(() => new Set(matches.map((m) => nodeId(m.card))), [matches]);
 
   const onQueryChange = (next: string) => {
@@ -198,6 +228,27 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
               total={matches.length}
               onNavigate={onNavigate}
             />
+            {schema && (
+              <span
+                className={`schema-chip${schema.error ? ' schema-chip--error' : ''}`}
+                title={schema.error ? `Could not load the schema: ${schema.error}` : `JSON Schema: ${schema.uri}`}
+              >
+                <Icon name={schema.error ? 'warning' : 'json'} />
+                {schema.name}
+                {schema.loading && ' (loading…)'}
+              </span>
+            )}
+            {schema && !schema.loading && !schema.error && (
+              <button
+                className={`problems-button${schema.problems.length > 0 ? ' problems-button--has' : ''}`}
+                disabled={schema.problems.length === 0}
+                title={schema.problems.length > 0 ? 'Go to the next schema problem' : 'No schema problems'}
+                onClick={goToNextProblem}
+              >
+                <Icon name={schema.problems.length > 0 ? 'error' : 'check'} />
+                {schema.problems.length}
+              </button>
+            )}
             {autoCollapsedDepth !== undefined && (
               <span className="toolbar-note" title="Expand nodes with their {n} / [n] summaries">
                 Large file: showing the first {autoCollapsedDepth + 1} level{autoCollapsedDepth === 0 ? '' : 's'}

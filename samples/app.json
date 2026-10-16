@@ -1,0 +1,15 @@
+{
+  "$schema": "./app.schema.json",
+  "name": "fileblocks-demo",
+  "mode": "testing",
+  "owner": {
+    "name": "Jane Doe",
+    "email": "not-an-email"
+  },
+  "servers": [
+    { "host": "localhost", "port": 8080, "protocol": "http" },
+    { "host": "api.example.com", "port": 70000 },
+    { "port": 443 }
+  ],
+  "colour": "blue"
+}

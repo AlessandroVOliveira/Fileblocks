@@ -8,7 +8,7 @@ const MIN_WIDTH = 180;
 const MAX_WIDTH = 420;
 const MAX_VALUE_WIDTH = 220;
 /** Room for row padding, drag handle, gaps and input padding (row actions float over the row). */
-const ROW_CHROME = 64;
+const ROW_CHROME = 80;
 const HEADER_CHROME = 120;
 
 export type BlockNodeData = {

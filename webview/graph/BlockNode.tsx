@@ -29,6 +29,7 @@ export function BlockNode({ data, positionAbsoluteY }: NodeProps<BlockFlowNode>)
           {nodeTitle(block)}
         </span>
         {isContainer && <span className="gnode-summary">{summary(block)}</span>}
+        <ProblemMarker messages={highlight.problems.get(block.id)} />
         <span className={`gnode-actions ${INTERACTIVE}`}>
           {isContainer && !block.readOnly && (
             <ActionButton
@@ -116,6 +117,7 @@ let dragSource: DragSource | undefined;
 function Row({ child, node, index }: { child: Block; node: Block; index: number }) {
   const actions = useActions();
   const highlight = useHighlight();
+  const hint = highlight.hints[child.id];
   const isContainer = child.children !== undefined;
   const collapsed = isContainer && actions.isCollapsed(child.id);
   const renamable = canRename(child, node);
@@ -185,11 +187,12 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
       </span>
       <span
         className={rowKeyClass(child)}
-        title={renamable ? 'Click to show in text · Double-click to rename' : 'Click to show in text'}
+        title={[hint?.description, renamable ? 'Click to show in text · Double-click to rename' : 'Click to show in text'].filter(Boolean).join('\n\n')}
         onClick={() => reveal(actions, child)}
         onDoubleClick={renamable ? () => rename(actions, child) : undefined}
       >
         {rowLabel(child)}
+        {hint?.required && <span className="row-required" title="Required by the schema">*</span>}
       </span>
       {isContainer ? (
         <button className="row-summary" title={collapsed ? 'Expand' : 'Collapse'} onClick={() => actions.toggleCollapsed(child.id)}>
@@ -201,6 +204,7 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
       ) : (
         <ScalarInput block={child} />
       )}
+      <ProblemMarker messages={highlight.problems.get(child.id)} />
       <span className="row-actions">
         {child.kind === 'element' && !child.readOnly && (
           // Inline element (no card of its own): adding an attribute or child gives it a card.
@@ -246,11 +250,50 @@ function matchClass(highlight: Highlight, block: Block): string {
   if (highlight.selectedId === block.id) {
     classes += ' row--selected';
   }
+  if (highlight.problems.has(block.id)) {
+    classes += ' row--invalid';
+  }
   return classes;
 }
 
 function ScalarInput({ block }: { block: Block }) {
+  const options = useHighlight().hints[block.id]?.enum;
+  if (options && !block.readOnly && options.every((option) => option === null || typeof option !== 'object')) {
+    return <EnumInput block={block} options={options as ScalarValue[]} />;
+  }
   return typeof block.value === 'boolean' ? <BooleanInput block={block} value={block.value} /> : <TextInput block={block} />;
+}
+
+/** Schema `enum`: a dropdown of the allowed values (keeping their types); an invalid current value stays listed. */
+function EnumInput({ block, options }: { block: Block; options: ScalarValue[] }) {
+  const actions = useActions();
+  const current = block.value ?? null;
+  const all = options.some((option) => option === current) ? options : [current, ...options];
+  return (
+    <select
+      className={`value value--enum value--${current === null ? 'null' : typeof current}`}
+      value={String(all.indexOf(current))}
+      onChange={(e) => setValue(actions, block, all[Number(e.target.value)])}
+    >
+      {all.map((option, i) => (
+        <option key={i} value={i}>
+          {option === null ? 'null' : String(option)}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Red error icon with the schema problem messages as tooltip. */
+function ProblemMarker({ messages }: { messages?: string[] }) {
+  if (!messages?.length) {
+    return null;
+  }
+  return (
+    <span className="problem-marker" title={messages.join('\n')}>
+      <Icon name="error" />
+    </span>
+  );
 }
 
 function BooleanInput({ block, value }: { block: Block; value: boolean }) {

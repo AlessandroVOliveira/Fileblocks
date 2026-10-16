@@ -1,5 +1,5 @@
 import { createContext, useContext } from 'react';
-import type { WebviewToHost } from '../src/model/messages';
+import type { SchemaHint, WebviewToHost } from '../src/model/messages';
 
 export interface EditorActions {
   post(message: WebviewToHost): void;
@@ -16,9 +16,13 @@ export interface Highlight {
   activeId?: string;
   /** Id of the block under the text editor's cursor (or last clicked). */
   selectedId?: string;
+  /** JSON Schema problem messages by block id. */
+  problems: ReadonlyMap<string, string[]>;
+  /** JSON Schema hints (description, enum, required) by block id. */
+  hints: Readonly<Record<string, SchemaHint>>;
 }
 
-export const HighlightContext = createContext<Highlight>({ matchIds: new Set() });
+export const HighlightContext = createContext<Highlight>({ matchIds: new Set(), problems: new Map(), hints: {} });
 
 export function useHighlight(): Highlight {
   return useContext(HighlightContext);

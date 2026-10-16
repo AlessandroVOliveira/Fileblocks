@@ -22,12 +22,41 @@ export type BlockEdit =
   /** Reorders a block within its parent; `toIndex` is its final position. */
   | { type: 'move'; path: BlockPath; toIndex: number };
 
+/** A JSON Schema violation at a block. */
+export interface SchemaProblem {
+  path: BlockPath;
+  message: string;
+}
+
+/** What the schema says about one block, for display. */
+export interface SchemaHint {
+  description?: string;
+  /** Allowed values (from `enum` / `const`). */
+  enum?: unknown[];
+  /** True when the parent object's schema lists this key as required. */
+  required?: boolean;
+}
+
+export interface SchemaInfo {
+  /** Short name for the toolbar (schema title or file name). */
+  name: string;
+  uri: string;
+  loading?: boolean;
+  /** Why the schema couldn't be loaded or compiled. */
+  error?: string;
+  problems: SchemaProblem[];
+  /** Hints keyed by block id. */
+  hints: Record<string, SchemaHint>;
+}
+
 export type HostToWebview =
   | {
       type: 'update';
       format: string;
       root: Block | null;
       errors: ParseError[];
+      /** Present when a JSON Schema applies to the file. */
+      schema?: SchemaInfo;
     }
   /** The block under the text editor's cursor (null when the cursor is outside every block). */
   | { type: 'selection'; path: BlockPath | null };

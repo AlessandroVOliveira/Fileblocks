@@ -42,6 +42,11 @@ src/
     jsonAdapter.ts             jsonc-parser + edições textuais que copiam a formatação existente
     yamlAdapter.ts             yaml (Document API, preserva comentários; vários documentos)
     markupAdapter.ts           XML e HTML (htmlparser2 + leitor de tags com posições dos atributos)
+  schema/
+    association.ts             qual schema se aplica ($schema, modeline YAML, json.schemas / yaml.schemas)
+    navigator.ts               percorre o schema por caminho: dicas, enum, obrigatórios, sugestões, defaults
+    validate.ts                validação com ajv e mapeamento dos erros para caminhos de blocos
+    SchemaService.ts           carrega (arquivo/https), compila e faz cache dos schemas
 webview/                       React + React Flow
   main.tsx                     ponto de entrada
   App.tsx                      canvas, toolbar, estado (recolhidos) e mensagens
@@ -101,6 +106,14 @@ muda a de abertura e a de fechamento. Comentários, `<?xml ?>` e `<!DOCTYPE>` n�
 no arquivo. Em HTML, tags com fechamento implícito (`<li>` sem `</li>`), atributos sem valor
 (`disabled`) e sem aspas (`class=list`) são respeitados.
 
+**JSON Schema** (JSON e YAML): o schema vem do `"$schema"` do próprio arquivo, do comentário
+`# yaml-language-server: $schema=...` no YAML, ou das configurações `json.schemas` / `yaml.schemas`.
+Schemas remotos são baixados (respeitando `json.schemaDownload.enable`). Com um schema:
+valores inválidos e propriedades obrigatórias faltando ficam marcados (a mensagem aparece no tooltip);
+a toolbar mostra o schema e o número de problemas (clique para ir ao próximo); chaves obrigatórias
+ganham `*` e as descrições aparecem no tooltip; `enum` vira uma lista de opções; e o **+** sugere as
+propriedades do schema (obrigatórias primeiro), já com o valor padrão. Veja `samples/app.json`.
+
 **Arquivos grandes:** na primeira abertura, se o grafo passar de 150 cards, só os primeiros níveis
 ficam expandidos (a toolbar avisa); a busca e o cursor do texto expandem o que for preciso. Acima de
 100 cards, o canvas só renderiza os cards visíveis, e cards com mais de 100 linhas só renderizam as
@@ -123,6 +136,7 @@ linhas visíveis.
 - [x] Mudar o tipo de um valor (ex.: string → number)
 - [x] Ícones (codicons) no lugar dos glifos de texto
 - [x] Sincronizar a seleção entre o bloco e o texto
-- [ ] Edição guiada por schema (JSON Schema / XSD)
+- [x] Edição guiada por JSON Schema (validação, dicas, enum, sugestões)
+- [ ] XSD / DTD para XML
 - [x] Testes unitários dos adapters
 - [x] Empacotar como .vsix
