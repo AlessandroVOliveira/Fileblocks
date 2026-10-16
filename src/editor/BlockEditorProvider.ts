@@ -30,8 +30,8 @@ interface EditorSchema {
   error?: string;
 }
 
-/** Formats checked against a schema: JSON Schema for JSON/YAML, XSD for XML. */
-const SCHEMA_FORMATS = new Set(['json', 'yaml', 'xml']);
+/** Formats checked against a schema: JSON Schema for JSON/YAML/TOML, XSD for XML. */
+const SCHEMA_FORMATS = new Set(['json', 'yaml', 'toml', 'xml']);
 
 /** Debounce for re-parsing while the user types in the text editor. */
 const UPDATE_DELAY_MS = 50;

@@ -1,6 +1,6 @@
 # Fileblocks
 
-Extensão do VS Code para visualizar e editar arquivos estruturados (JSON, YAML, XML, HTML) como um
+Extensão do VS Code para visualizar e editar arquivos estruturados (JSON, YAML, TOML, XML, HTML) como um
 grafo de nós em um canvas, no estilo do [JSON Crack](https://jsoncrack.com/editor), com edição direta nos nós.
 
 ## Desenvolvimento
@@ -41,12 +41,14 @@ src/
     textEdits.ts               edições textuais compartilhadas (rotacionar irmãos, indentação)
     jsonAdapter.ts             jsonc-parser + edições textuais que copiam a formatação existente
     yamlAdapter.ts             yaml (Document API, preserva comentários; vários documentos)
+    tomlAdapter.ts             TOML (toml-eslint-parser; tabelas, chaves com ponto, inline, [[arrays]])
     markupAdapter.ts           XML e HTML (htmlparser2 + leitor de tags com posições dos atributos)
   schema/
-    association.ts             qual schema se aplica ($schema, modeline YAML, json.schemas / yaml.schemas)
+    association.ts             qual schema se aplica ($schema, modeline YAML, #:schema, xsi:*, settings)
     navigator.ts               percorre o schema por caminho: dicas, enum, obrigatórios, sugestões, defaults
     validate.ts                validação com ajv e mapeamento dos erros para caminhos de blocos
-    SchemaService.ts           carrega (arquivo/https), compila e faz cache dos schemas
+    xsd.ts                     subconjunto de XSD: validação, dicas e sugestões para XML
+    SchemaService.ts           carrega (arquivo/https), compila e faz cache dos schemas; escolha manual
 webview/                       React + React Flow
   main.tsx                     ponto de entrada
   App.tsx                      canvas, toolbar, estado (recolhidos) e mensagens
@@ -58,6 +60,7 @@ webview/                       React + React Flow
     search.ts                  busca em chaves e valores (função pura, testada)
     targets.ts                 onde um bloco aparece (card + linha) e o que expandir para mostrá-lo
     collapse.ts                quais níveis recolher ao abrir arquivos grandes
+  exportImage.ts               exporta o grafo inteiro como PNG/SVG (html-to-image)
   SearchBox.tsx                campo de busca da toolbar
   styles.css                   tema do VS Code aplicado ao canvas e aos nós
 test/                          testes dos adapters e do grafo
@@ -90,6 +93,9 @@ Os adapters não dependem da API do `vscode`, então são testados com testes un
 | Renomear | Duplo clique na chave ou botão **✎** |
 | Remover | Botão **×** na linha ou no cabeçalho do card |
 | Reordenar | Arraste a linha pelo **⠿** ou Alt+↑/↓ com o valor focado |
+| Expandir/recolher tudo | Botões na toolbar |
+| Exportar imagem | Botão de exportar na toolbar ou **Fileblocks: Export Graph as Image…** (PNG ou SVG; o grafo inteiro, sem os ícones) |
+| Escolher schema | Clique no nome do schema (ou em "No schema") na toolbar, ou **Fileblocks: Select Schema…**: arquivo, URL, detecção automática ou nenhum |
 | Mudar o tipo | Botão **⇄** na linha ou no cabeçalho do card (ex.: `"8080"` → `8080`; converter um objeto/array com itens pede confirmação) |
 
 Tudo passa pelo documento, então **Ctrl+Z** desfaz qualquer ação.
@@ -106,18 +112,33 @@ muda a de abertura e a de fechamento. Comentários, `<?xml ?>` e `<!DOCTYPE>` n�
 no arquivo. Em HTML, tags com fechamento implícito (`<li>` sem `</li>`), atributos sem valor
 (`disabled`) e sem aspas (`class=list`) são respeitados.
 
-**JSON Schema** (JSON e YAML): o schema vem do `"$schema"` do próprio arquivo, do comentário
-`# yaml-language-server: $schema=...` no YAML, ou das configurações `json.schemas` / `yaml.schemas`.
+**TOML:** tabelas `[a]`, chaves com ponto (`a.b = 1`), tabelas e arrays inline e arrays de tabelas
+`[[a]]` viram objetos e arrays. Dá para editar valores (datas continuam sem aspas), renomear chaves e
+cabeçalhos, remover entradas e seções inteiras, inserir `chave = valor` numa tabela ou itens em `{…}` /
+`[…]`, e reordenar entradas da mesma tabela. Objetos que só existem por chaves com ponto não recebem
+novas chaves pelo grafo (não há um lugar único no texto para elas).
+
+**JSON Schema** (JSON, YAML e TOML): o schema vem da escolha manual (**Select Schema…**), do `"$schema"`
+do próprio arquivo, do comentário `# yaml-language-server: $schema=...` no YAML, da diretiva
+`#:schema ...` no TOML, ou das configurações `json.schemas` / `yaml.schemas`.
 Schemas remotos são baixados (respeitando `json.schemaDownload.enable`). Com um schema:
 valores inválidos e propriedades obrigatórias faltando ficam marcados (a mensagem aparece no tooltip);
 a toolbar mostra o schema e o número de problemas (clique para ir ao próximo); chaves obrigatórias
 ganham `*` e as descrições aparecem no tooltip; `enum` vira uma lista de opções; e o **+** sugere as
 propriedades do schema (obrigatórias primeiro), já com o valor padrão. Veja `samples/app.json`.
 
+**XSD** (XML): o schema vem de `xsi:noNamespaceSchemaLocation` / `xsi:schemaLocation`, da configuração
+`xml.fileAssociations` ou do **Select Schema…**. É um subconjunto de XSD avaliado sobre os blocos:
+elementos e atributos permitidos e obrigatórios, quantidade máxima, `enumeration`, tipos básicos
+(inteiros, decimais, booleano, datas) e facetas (min/max, tamanho, `pattern`); `include`/`import` são
+carregados. Não verifica a ordem dentro de `sequence`, namespaces nem restrições de identidade.
+Documentação do XSD aparece nos tooltips e o **+** sugere atributos e filhos válidos. Veja `samples/catalog.xml`.
+
 **Arquivos grandes:** na primeira abertura, se o grafo passar de 150 cards, só os primeiros níveis
 ficam expandidos (a toolbar avisa); a busca e o cursor do texto expandem o que for preciso. Acima de
 100 cards, o canvas só renderiza os cards visíveis, e cards com mais de 100 linhas só renderizam as
-linhas visíveis.
+linhas visíveis. Exportar como PNG um grafo muito grande pode demorar e sai com resolução reduzida
+(máx. 8000 px por lado); para esses casos, prefira SVG.
 
 ## Roadmap
 
@@ -137,6 +158,9 @@ linhas visíveis.
 - [x] Ícones (codicons) no lugar dos glifos de texto
 - [x] Sincronizar a seleção entre o bloco e o texto
 - [x] Edição guiada por JSON Schema (validação, dicas, enum, sugestões)
-- [ ] XSD / DTD para XML
+- [x] XSD para XML (subconjunto)
+- [x] Expandir/recolher tudo, exportar PNG/SVG, escolher schema manualmente
+- [x] TOML
+- [ ] DTD para XML
 - [x] Testes unitários dos adapters
 - [x] Empacotar como .vsix

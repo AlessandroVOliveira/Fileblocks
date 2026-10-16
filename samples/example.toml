@@ -1,0 +1,21 @@
+# Sample TOML: tables, dotted keys, inline values and arrays of tables
+title = "fileblocks-demo"
+version = 3
+owner.name = "Jane Doe"
+owner.email = "jane@example.com"
+released = 2026-10-16
+
+[server]
+host = "localhost"
+port = 8080
+secure = false
+tags = ["json", "yaml", "toml"]
+limits = { requests = 100, burst = 20 }
+
+[[mirrors]]
+host = "eu.example.com"
+port = 443
+
+[[mirrors]]
+host = "us.example.com"
+port = 443

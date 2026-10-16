@@ -5,6 +5,7 @@ import { parse as parseJsonc } from 'jsonc-parser';
  * - JSON: a root `"$schema": "<uri>"` property;
  * - YAML: a `# yaml-language-server: $schema=<uri>` modeline (the Red Hat YAML convention),
  *   or a root `$schema: <uri>` key;
+ * - TOML: a `#:schema <uri>` directive (the Taplo convention);
  * - XML: `xsi:noNamespaceSchemaLocation`, or the first location of `xsi:schemaLocation`.
  */
 export function inlineSchemaReference(text: string, format: string): string | undefined {
@@ -19,6 +20,10 @@ export function inlineSchemaReference(text: string, format: string): string | un
       return modeline[1];
     }
     return /^\$schema:\s*["']?([^"'\s#]+)/m.exec(text)?.[1];
+  }
+  if (format === 'toml') {
+    // Taplo's `#:schema <uri>` directive.
+    return /^#:schema\s+(\S+)/m.exec(text)?.[1];
   }
   if (format === 'xml') {
     const noNamespace = /\b(?:[\w.-]+:)?noNamespaceSchemaLocation\s*=\s*["']\s*([^"'\s]+)/.exec(text);

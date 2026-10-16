@@ -1,5 +1,6 @@
 import { jsonAdapter } from './jsonAdapter';
 import { createMarkupAdapter } from './markupAdapter';
+import { tomlAdapter } from './tomlAdapter';
 import type { FormatAdapter } from './types';
 import { yamlAdapter } from './yamlAdapter';
 
@@ -12,6 +13,7 @@ const byLanguageId: Record<string, FormatAdapter> = {
   json: jsonAdapter,
   jsonc: jsonAdapter,
   yaml: yamlAdapter,
+  toml: tomlAdapter,
   xml: xmlAdapter,
   html: htmlAdapter,
 };
@@ -21,6 +23,7 @@ const byExtension: Record<string, FormatAdapter> = {
   jsonc: jsonAdapter,
   yaml: yamlAdapter,
   yml: yamlAdapter,
+  toml: tomlAdapter,
   xml: xmlAdapter,
   html: htmlAdapter,
   htm: htmlAdapter,

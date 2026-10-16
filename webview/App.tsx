@@ -34,7 +34,7 @@ const nodeTypes = { block: BlockNode };
 /** Rows closer than this to the canvas edge count as off screen. */
 const SCREEN_MARGIN = 40;
 /** Formats that can be checked against a schema (JSON Schema, XSD). */
-const SCHEMA_FORMATS = new Set(['json', 'yaml', 'xml']);
+const SCHEMA_FORMATS = new Set(['json', 'yaml', 'toml', 'xml']);
 /** Card count above which React Flow only renders the cards in view. */
 const VIRTUALIZE_ABOVE = 100;
 

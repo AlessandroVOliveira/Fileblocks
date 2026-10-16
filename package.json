@@ -1,7 +1,7 @@
 {
   "name": "fileblocks",
   "displayName": "Fileblocks",
-  "description": "Visual block editor for structured files (JSON, YAML, XML, HTML).",
+  "description": "Visual block editor for structured files (JSON, YAML, TOML, XML, HTML).",
   "version": "0.0.1",
   "publisher": "fileblocks-dev",
   "license": "MIT",
@@ -31,6 +31,9 @@
           },
           {
             "filenamePattern": "*.yml"
+          },
+          {
+            "filenamePattern": "*.toml"
           },
           {
             "filenamePattern": "*.xml"
@@ -68,14 +71,14 @@
       "editor/title": [
         {
           "command": "fileblocks.openBlockEditor",
-          "when": "resourceExtname =~ /^\\.(json|jsonc|ya?ml|xml|html?)$/ && activeCustomEditorId != 'fileblocks.blockEditor'",
+          "when": "resourceExtname =~ /^\\.(json|jsonc|ya?ml|xml|html?|toml)$/ && activeCustomEditorId != 'fileblocks.blockEditor'",
           "group": "navigation"
         }
       ],
       "explorer/context": [
         {
           "command": "fileblocks.openBlockEditor",
-          "when": "resourceExtname =~ /^\\.(json|jsonc|ya?ml|xml|html?)$/",
+          "when": "resourceExtname =~ /^\\.(json|jsonc|ya?ml|xml|html?|toml)$/",
           "group": "navigation"
         }
       ],
@@ -111,6 +114,7 @@
     "jsonc-parser": "^3.3.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "toml-eslint-parser": "^0.10.1",
     "yaml": "^2.6.0"
   },
   "devDependencies": {
