@@ -9,6 +9,7 @@ import { layoutGraph, type BlockFlowNode } from './graph/layout';
 import { initialCollapse } from './graph/collapse';
 import { findMatches } from './graph/search';
 import { idsToReveal, targetFor, type GraphTarget } from './graph/targets';
+import { Icon } from './Icon';
 import { SearchBox } from './SearchBox';
 
 export interface VsCodeApi {
@@ -203,7 +204,7 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
               </span>
             )}
             <button className="toolbar-button" onClick={() => vscode.postMessage({ type: 'openText' })}>
-              Open as text
+              <Icon name="go-to-file" /> Open as text
             </button>
           </div>
           {update && update.errors.length > 0 && (

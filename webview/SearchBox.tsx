@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { Icon } from './Icon';
 
 interface SearchBoxProps {
   query: string;
@@ -28,6 +29,7 @@ export function SearchBox({ query, onQueryChange, current, total, onNavigate }: 
 
   return (
     <div className={`search${hasQuery && total === 0 ? ' search--empty' : ''}`}>
+      <Icon name="search" />
       <input
         ref={input}
         className="search-input"
@@ -45,11 +47,11 @@ export function SearchBox({ query, onQueryChange, current, total, onNavigate }: 
         }}
       />
       {hasQuery && <span className="search-count">{total === 0 ? 'No results' : `${current + 1}/${total}`}</span>}
-      <button className="action" title="Previous match (Shift+Enter)" disabled={total === 0} onClick={() => onNavigate(-1)}>
-        ↑
+      <button className="action" title="Previous match (Shift+Enter)" disabled={total === 0} aria-label="Previous match" onClick={() => onNavigate(-1)}>
+        <Icon name="arrow-up" />
       </button>
-      <button className="action" title="Next match (Enter)" disabled={total === 0} onClick={() => onNavigate(1)}>
-        ↓
+      <button className="action" title="Next match (Enter)" disabled={total === 0} aria-label="Next match" onClick={() => onNavigate(1)}>
+        <Icon name="arrow-down" />
       </button>
     </div>
   );

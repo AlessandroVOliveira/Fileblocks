@@ -99,7 +99,8 @@ no arquivo. Em HTML, tags com fechamento implícito (`<li>` sem `</li>`), atribu
 
 **Arquivos grandes:** na primeira abertura, se o grafo passar de 150 cards, só os primeiros níveis
 ficam expandidos (a toolbar avisa); a busca e o cursor do texto expandem o que for preciso. Acima de
-100 cards, o canvas só renderiza os cards visíveis.
+100 cards, o canvas só renderiza os cards visíveis, e cards com mais de 100 linhas só renderizam as
+linhas visíveis.
 
 ## Roadmap
 
@@ -110,13 +111,13 @@ ficam expandidos (a toolbar avisa); a busca e o cursor do texto expandem o que f
 - [x] Busca no grafo (destacar, navegar e centralizar resultados)
 - [x] Clicar num nó revela o trecho no editor de texto
 - [x] Performance com arquivos grandes (virtualização / recolher níveis profundos por padrão)
-- [ ] Virtualizar as linhas dentro de cards enormes (ex.: um array com milhares de itens)
+- [x] Virtualizar as linhas dentro de cards enormes (ex.: um array com milhares de itens)
 - [x] XML e HTML com parser que guarda posições
 - [x] XML/HTML: mostrar elementos só com texto (`<li>JSON</li>`) como uma linha, sem card próprio
 - [x] Detecção de indentação no JSON
 - [x] YAML multi-documento
 - [x] Mudar o tipo de um valor (ex.: string → number)
-- [ ] Ícones (codicons) no lugar dos glifos de texto
+- [x] Ícones (codicons) no lugar dos glifos de texto
 - [x] Sincronizar a seleção entre o bloco e o texto
 - [ ] Edição guiada por schema (JSON Schema / XSD)
 - [x] Testes unitários dos adapters

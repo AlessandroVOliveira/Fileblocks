@@ -1,19 +1,21 @@
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { Handle, Position, useStore, type NodeProps } from '@xyflow/react';
 import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react';
 import type { Block, ScalarValue } from '../../src/model/block';
 import { useActions, useHighlight, type EditorActions, type Highlight } from '../actions';
 import { displayValue, HEADER_HEIGHT, nodeId, nodeTitle, ROW_HEIGHT, rowLabel, summary } from './buildGraph';
+import { Icon } from '../Icon';
 import type { BlockFlowNode } from './layout';
 
 // `nodrag nopan` stop React Flow from treating clicks/drags on interactive parts as canvas panning.
 const INTERACTIVE = 'nodrag nopan';
 
-export function BlockNode({ data }: NodeProps<BlockFlowNode>) {
+export function BlockNode({ data, positionAbsoluteY }: NodeProps<BlockFlowNode>) {
   const { block, parent, width, height } = data;
   const actions = useActions();
   const highlight = useHighlight();
   const isContainer = block.children !== undefined;
   const rows = block.children ?? [];
+  const [firstRow, lastRow] = useVisibleRows(rows.length, positionAbsoluteY);
 
   return (
     <div className={`gnode gnode--${block.kind}${highlight.selectedId === block.id ? ' gnode--selected' : ''}`} style={{ width, height }}>
@@ -30,20 +32,20 @@ export function BlockNode({ data }: NodeProps<BlockFlowNode>) {
         <span className={`gnode-actions ${INTERACTIVE}`}>
           {isContainer && !block.readOnly && (
             <ActionButton
-              text="+"
+              icon="add"
               title={block.kind === 'array' ? 'Add item' : block.kind === 'element' ? 'Add child, attribute or text' : 'Add entry'}
               onClick={() => actions.post({ type: 'add', parentPath: block.path })}
             />
           )}
-          {canChangeType(block) && <ActionButton text="⇄" title="Change type" onClick={() => changeType(actions, block)} />}
-          {canRename(block, parent) && <ActionButton text="✎" title="Rename" onClick={() => rename(actions, block)} />}
-          {parent && !parent.readOnly && <ActionButton text="×" title="Remove" onClick={() => remove(actions, block)} />}
+          {canChangeType(block) && <ActionButton icon="arrow-swap" title="Change type" onClick={() => changeType(actions, block)} />}
+          {canRename(block, parent) && <ActionButton icon="edit" title="Rename" onClick={() => rename(actions, block)} />}
+          {parent && !parent.readOnly && <ActionButton icon="close" title="Remove" onClick={() => remove(actions, block)} />}
         </span>
       </div>
 
       {!isContainer && (
         <div className={`gnode-row ${INTERACTIVE}${matchClass(highlight, block)}`} style={{ height: ROW_HEIGHT }}>
-          <ScalarInput block={block} />
+          {block.value === undefined ? <span className="row-void" /> : <ScalarInput block={block} />}
         </div>
       )}
       {isContainer && rows.length === 0 && (
@@ -51,11 +53,55 @@ export function BlockNode({ data }: NodeProps<BlockFlowNode>) {
           empty
         </div>
       )}
-      {rows.map((child, index) => (
-        <Row key={child.id} child={child} node={block} index={index} />
+      {/* Long cards only render the rows in view; a spacer keeps the rendered ones at their position. */}
+      {firstRow > 0 && <div style={{ height: firstRow * ROW_HEIGHT }} />}
+      {rows.slice(firstRow, lastRow).map((child, i) => (
+        <Row key={child.id} child={child} node={block} index={firstRow + i} />
       ))}
+
+      {/* Edge handles for every expanded child, rendered even when its row is virtualized away. */}
+      {rows.map(
+        (child, index) =>
+          child.children !== undefined &&
+          !actions.isCollapsed(child.id) && (
+            <Handle
+              key={child.id}
+              type="source"
+              position={Position.Right}
+              id={nodeId(child)}
+              isConnectable={false}
+              style={{ top: HEADER_HEIGHT + index * ROW_HEIGHT + ROW_HEIGHT / 2 }}
+            />
+          ),
+      )}
     </div>
   );
+}
+
+/** Cards with more rows than this only render the rows in view. */
+const VIRTUALIZE_ROWS_ABOVE = 100;
+/** Extra rows rendered above and below the viewport, so fast panning doesn't show blanks. */
+const OVERSCAN_ROWS = 20;
+
+/**
+ * Range [first, last) of rows to render. Rows have a fixed height, so it follows from the
+ * viewport transform and the card position. The selector returns a string so the card only
+ * re-renders when the range actually changes, not on every pan frame.
+ */
+function useVisibleRows(count: number, nodeY: number): [number, number] {
+  const range = useStore((state) => {
+    if (count <= VIRTUALIZE_ROWS_ABOVE) {
+      return `0:${count}`;
+    }
+    const [, panY, zoom] = state.transform;
+    const top = -panY / zoom - nodeY - HEADER_HEIGHT;
+    const bottom = top + state.height / zoom;
+    const first = Math.min(count, Math.max(0, Math.floor(top / ROW_HEIGHT) - OVERSCAN_ROWS));
+    const last = Math.min(count, Math.max(first, Math.ceil(bottom / ROW_HEIGHT) + OVERSCAN_ROWS));
+    return `${first}:${last}`;
+  });
+  const [first, last] = range.split(':').map(Number);
+  return [first, last];
 }
 
 interface DragSource {
@@ -135,7 +181,7 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
           document.querySelectorAll('.drop-before, .drop-after').forEach(clearDropIndicator);
         }}
       >
-        ⠿
+        <Icon name="gripper" />
       </span>
       <span
         className={rowKeyClass(child)}
@@ -147,7 +193,7 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
       </span>
       {isContainer ? (
         <button className="row-summary" title={collapsed ? 'Expand' : 'Collapse'} onClick={() => actions.toggleCollapsed(child.id)}>
-          {summary(child)} {collapsed ? '▸' : '▾'}
+          {summary(child)} <Icon name={collapsed ? 'chevron-right' : 'chevron-down'} />
         </button>
       ) : child.value === undefined ? (
         // Void element (<br>): just the tag, nothing to edit.
@@ -158,21 +204,12 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
       <span className="row-actions">
         {child.kind === 'element' && !child.readOnly && (
           // Inline element (no card of its own): adding an attribute or child gives it a card.
-          <ActionButton text="+" title="Add child, attribute or text" onClick={() => actions.post({ type: 'add', parentPath: child.path })} />
+          <ActionButton icon="add" title="Add child, attribute or text" onClick={() => actions.post({ type: 'add', parentPath: child.path })} />
         )}
-        {canChangeType(child) && <ActionButton text="⇄" title="Change type" onClick={() => changeType(actions, child)} />}
-        {renamable && <ActionButton text="✎" title="Rename" onClick={() => rename(actions, child)} />}
-        {!fixed && <ActionButton text="×" title="Remove" onClick={() => remove(actions, child)} />}
+        {canChangeType(child) && <ActionButton icon="arrow-swap" title="Change type" onClick={() => changeType(actions, child)} />}
+        {renamable && <ActionButton icon="edit" title="Rename" onClick={() => rename(actions, child)} />}
+        {!fixed && <ActionButton icon="close" title="Remove" onClick={() => remove(actions, child)} />}
       </span>
-      {isContainer && !collapsed && (
-        <Handle
-          type="source"
-          position={Position.Right}
-          id={nodeId(child)}
-          isConnectable={false}
-          style={{ top: HEADER_HEIGHT + index * ROW_HEIGHT + ROW_HEIGHT / 2 }}
-        />
-      )}
     </div>
   );
 }
@@ -261,10 +298,10 @@ function TextInput({ block }: { block: Block }) {
   );
 }
 
-function ActionButton({ text, title, onClick }: { text: string; title: string; onClick: () => void }) {
+function ActionButton({ icon, title, onClick }: { icon: string; title: string; onClick: () => void }) {
   return (
-    <button className="action" title={title} onClick={onClick}>
-      {text}
+    <button className="action" title={title} aria-label={title} onClick={onClick}>
+      <Icon name={icon} />
     </button>
   );
 }

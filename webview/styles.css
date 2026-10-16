@@ -410,3 +410,26 @@ button:focus-visible {
 .row-void {
   flex: 1;
 }
+
+/* ---------- codicons ---------- */
+
+.action .codicon {
+  font-size: 14px;
+}
+
+.toolbar-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search > .codicon {
+  padding-left: 6px;
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.row-handle .codicon,
+.row-summary .codicon {
+  font-size: 12px;
+  vertical-align: middle;
+}

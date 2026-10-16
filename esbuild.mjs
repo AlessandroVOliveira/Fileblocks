@@ -30,6 +30,8 @@ const builds = [
     entryPoints: ['webview/main.tsx'],
     outfile: 'dist/webview.js',
     platform: 'browser',
+    // The codicon font referenced by codicon.css is copied next to the bundle.
+    loader: { '.ttf': 'file' },
     format: 'iife',
   },
 ];
