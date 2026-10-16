@@ -4,7 +4,8 @@ import { parse as parseJsonc } from 'jsonc-parser';
  * The schema a file points to itself:
  * - JSON: a root `"$schema": "<uri>"` property;
  * - YAML: a `# yaml-language-server: $schema=<uri>` modeline (the Red Hat YAML convention),
- *   or a root `$schema: <uri>` key.
+ *   or a root `$schema: <uri>` key;
+ * - XML: `xsi:noNamespaceSchemaLocation`, or the first location of `xsi:schemaLocation`.
  */
 export function inlineSchemaReference(text: string, format: string): string | undefined {
   if (format === 'json') {
@@ -18,6 +19,14 @@ export function inlineSchemaReference(text: string, format: string): string | un
       return modeline[1];
     }
     return /^\$schema:\s*["']?([^"'\s#]+)/m.exec(text)?.[1];
+  }
+  if (format === 'xml') {
+    const noNamespace = /\b(?:[\w.-]+:)?noNamespaceSchemaLocation\s*=\s*["']\s*([^"'\s]+)/.exec(text);
+    if (noNamespace) {
+      return noNamespace[1];
+    }
+    // Pairs of "namespace location": take the first location.
+    return /\b(?:[\w.-]+:)?schemaLocation\s*=\s*["']\s*\S+\s+([^"'\s]+)/.exec(text)?.[1];
   }
   return undefined;
 }
@@ -59,9 +68,20 @@ export interface SchemaSetting {
   fileMatch: string[];
 }
 
-/** Reads `json.schemas` (array of { fileMatch, url | schema }) and `yaml.schemas` ({ url: glob | glob[] }). */
-export function schemaSettings(jsonSchemas: unknown, yamlSchemas: unknown, format: string): SchemaSetting[] {
+/**
+ * Reads `json.schemas` (array of { fileMatch, url | schema }), `yaml.schemas` ({ url: glob | glob[] })
+ * and, for XML, `xml.fileAssociations` (array of { pattern, systemId }, the Red Hat XML convention).
+ */
+export function schemaSettings(jsonSchemas: unknown, yamlSchemas: unknown, format: string, xmlAssociations?: unknown): SchemaSetting[] {
   const settings: SchemaSetting[] = [];
+  if (format === 'xml') {
+    for (const entry of Array.isArray(xmlAssociations) ? xmlAssociations : []) {
+      if (entry && typeof entry.pattern === 'string' && typeof entry.systemId === 'string') {
+        settings.push({ url: entry.systemId, fileMatch: [entry.pattern] });
+      }
+    }
+    return settings;
+  }
   if (Array.isArray(jsonSchemas)) {
     for (const entry of jsonSchemas) {
       if (entry && typeof entry === 'object' && Array.isArray(entry.fileMatch)) {

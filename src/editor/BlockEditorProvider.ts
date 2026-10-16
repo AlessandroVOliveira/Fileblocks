@@ -3,7 +3,9 @@ import { findBlock, findBlockAt, type Block, type BlockPath } from '../model/blo
 import { convertValue, typeOf, type ValueType } from '../model/convert';
 import type { BlockEdit, HostToWebview, InsertValue, SchemaInfo, WebviewToHost } from '../model/messages';
 import { getAdapter, type FormatAdapter } from '../parsers';
+import type { PropertySuggestion } from '../schema/navigator';
 import { SchemaService, type LoadedSchema, type SchemaReference } from '../schema/SchemaService';
+import { xsdSuggestions } from '../schema/xsd';
 import { getWebviewHtml } from './webviewHtml';
 
 interface ValueTypeItem extends vscode.QuickPickItem {
@@ -27,6 +29,9 @@ interface EditorSchema {
   loaded?: LoadedSchema;
   error?: string;
 }
+
+/** Formats checked against a schema: JSON Schema for JSON/YAML, XSD for XML. */
+const SCHEMA_FORMATS = new Set(['json', 'yaml', 'xml']);
 
 /** Debounce for re-parsing while the user types in the text editor. */
 const UPDATE_DELAY_MS = 50;
@@ -79,7 +84,7 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     // loaded asynchronously; when loading finishes the graph is updated again.
     let schema: EditorSchema | undefined;
     const refreshSchema = (force = false) => {
-      const reference = adapter?.instances ? this.schemas.locate(document, adapter.id) : undefined;
+      const reference = adapter && SCHEMA_FORMATS.has(adapter.id) ? this.schemas.locate(document, adapter.id) : undefined;
       if (!force && reference?.uri === schema?.reference.uri) {
         return;
       }
@@ -312,43 +317,32 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
 
   private async promptInsert(document: vscode.TextDocument, adapter: FormatAdapter, parentPath: BlockPath, schema?: LoadedSchema): Promise<void> {
     const text = document.getText();
-    const parent = findBlock(adapter.parse(text).root, parentPath);
+    const root = adapter.parse(text).root;
+    const parent = findBlock(root, parentPath);
     if (parent?.kind === 'element' && !parent.readOnly) {
-      return this.promptInsertMarkup(document, adapter, parent);
+      return this.promptInsertMarkup(document, adapter, parent, schema?.kind === 'xsd' ? xsdSuggestions(root, schema.model, parentPath) : undefined);
     }
     if ((parent?.kind !== 'object' && parent?.kind !== 'array') || parent.readOnly) {
       return;
     }
     const title = 'Fileblocks: Add entry';
     const schemaPath = SchemaService.schemaPath(adapter, text, parentPath);
+    const navigator = schema?.kind === 'json' ? schema.navigator : undefined;
 
     let key: string | undefined;
     if (parent.kind === 'object') {
       const existing = siblingKeys(parent.children);
       // With a schema, offer the properties it defines (required first) before free typing.
-      const suggestions = schema?.navigator.properties(schemaPath).filter((property) => !existing.includes(property.name)) ?? [];
-      if (suggestions.length > 0) {
-        const items = [
-          ...suggestions.map((s) => ({ label: s.name, description: s.required ? 'required' : undefined, detail: s.description, name: s.name as string | undefined })),
-          { label: '$(edit) Other key…', name: undefined },
-        ];
-        const picked = await vscode.window.showQuickPick(items, { title, placeHolder: 'Property to add', matchOnDetail: true });
-        if (!picked) {
-          return;
-        }
-        key = picked.name;
-      }
+      const suggestions = navigator?.properties(schemaPath).filter((property) => !existing.includes(property.name)) ?? [];
+      key = await pickName(title, suggestions, 'Property to add', 'Key for the new entry', (value) => validateKey(value, existing));
       if (key === undefined) {
-        key = await vscode.window.showInputBox({ title, prompt: 'Key for the new entry', validateInput: (value) => validateKey(value, existing) });
-        if (key === undefined) {
-          return;
-        }
+        return;
       }
     }
 
     // The schema's default / enum / type decides the initial value; otherwise ask for a type.
     const childSegment = parent.kind === 'array' ? (parent.children?.length ?? 0) : key!;
-    let value = schema?.navigator.defaultValue([...schemaPath, childSegment]);
+    let value = navigator?.defaultValue([...schemaPath, childSegment]);
     if (value === undefined) {
       const type = await vscode.window.showQuickPick(VALUE_TYPES, { title, placeHolder: 'Type of the new value' });
       if (!type) {
@@ -359,8 +353,13 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     await this.applyEdit(document, adapter, { type: 'insert', parentPath, key, value });
   }
 
-  /** XML/HTML: an element can get a child element, an attribute or text. */
-  private async promptInsertMarkup(document: vscode.TextDocument, adapter: FormatAdapter, parent: Block): Promise<void> {
+  /** XML/HTML: an element can get a child element, an attribute or text. With an XSD, its names are offered first. */
+  private async promptInsertMarkup(
+    document: vscode.TextDocument,
+    adapter: FormatAdapter,
+    parent: Block,
+    suggestions?: { attributes: PropertySuggestion[]; elements: PropertySuggestion[] },
+  ): Promise<void> {
     const title = `Fileblocks: Add to <${parent.caption}>`;
     const choice = await vscode.window.showQuickPick(
       [
@@ -383,11 +382,13 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     }
 
     const existing = choice.what === 'attribute' ? attributeNames(parent) : [];
-    const name = await vscode.window.showInputBox({
+    const name = await pickName(
       title,
-      prompt: choice.what === 'attribute' ? 'Attribute name' : 'Tag name',
-      validateInput: (value) => validateMarkupName(value, choice.what, existing),
-    });
+      (choice.what === 'attribute' ? suggestions?.attributes : suggestions?.elements) ?? [],
+      choice.what === 'attribute' ? 'Attribute to add' : 'Element to add',
+      choice.what === 'attribute' ? 'Attribute name' : 'Tag name',
+      (value) => validateMarkupName(value, choice.what, existing),
+    );
     if (name === undefined) {
       return;
     }
@@ -490,6 +491,33 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     }
     await vscode.workspace.applyEdit(workspaceEdit);
   }
+}
+
+/**
+ * Asks for a key/name: the schema's suggestions first (required ones marked), with "Other…" for free
+ * typing; without suggestions, straight to the input box. Undefined when cancelled.
+ */
+async function pickName(
+  title: string,
+  suggestions: PropertySuggestion[],
+  placeHolder: string,
+  prompt: string,
+  validate: (value: string) => string | undefined,
+): Promise<string | undefined> {
+  if (suggestions.length > 0) {
+    const items = [
+      ...suggestions.map((s) => ({ label: s.name, description: s.required ? 'required' : undefined, detail: s.description, name: s.name as string | undefined })),
+      { label: '$(edit) Other…', name: undefined },
+    ];
+    const picked = await vscode.window.showQuickPick(items, { title, placeHolder, matchOnDetail: true });
+    if (!picked) {
+      return undefined;
+    }
+    if (picked.name !== undefined) {
+      return picked.name;
+    }
+  }
+  return vscode.window.showInputBox({ title, prompt, validateInput: validate });
 }
 
 function attributeNames(element: Block): string[] {

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<catalog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="catalog.xsd"
+         version="1.2" updated="2026-13-40">
+  <title>Fileblocks bookshop</title>
+  <book isbn="9780000000001" available="yes">
+    <name>Structured Data</name>
+    <author>Jane Doe</author>
+    <price>-5</price>
+    <format>audiobook</format>
+  </book>
+  <book isbn="123">
+    <name>Graphs for Everyone</name>
+    <author>A</author>
+    <author>B</author>
+    <author>C</author>
+    <author>D</author>
+  </book>
+  <magazine>Not in the schema</magazine>
+</catalog>

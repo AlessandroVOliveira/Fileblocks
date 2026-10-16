@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="catalog">
+    <xs:annotation><xs:documentation>A list of books for sale.</xs:documentation></xs:annotation>
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element name="title" type="xs:string"/>
+        <xs:element name="book" type="bookType" maxOccurs="unbounded"/>
+      </xs:sequence>
+      <xs:attribute name="version" type="xs:decimal" use="required"/>
+      <xs:attribute name="updated" type="xs:date"/>
+    </xs:complexType>
+  </xs:element>
+
+  <xs:complexType name="bookType">
+    <xs:annotation><xs:documentation>One book in the catalog.</xs:documentation></xs:annotation>
+    <xs:sequence>
+      <xs:element name="name" type="xs:string">
+        <xs:annotation><xs:documentation>Book title as printed on the cover.</xs:documentation></xs:annotation>
+      </xs:element>
+      <xs:element name="author" type="xs:string" maxOccurs="3"/>
+      <xs:element name="price" type="priceType"/>
+      <xs:element name="format" type="formatType" minOccurs="0"/>
+    </xs:sequence>
+    <xs:attribute name="isbn" use="required">
+      <xs:annotation><xs:documentation>13-digit ISBN.</xs:documentation></xs:annotation>
+      <xs:simpleType>
+        <xs:restriction base="xs:string">
+          <xs:pattern value="\d{13}"/>
+        </xs:restriction>
+      </xs:simpleType>
+    </xs:attribute>
+    <xs:attribute name="available" type="xs:boolean"/>
+  </xs:complexType>
+
+  <xs:simpleType name="priceType">
+    <xs:restriction base="xs:decimal">
+      <xs:minInclusive value="0"/>
+    </xs:restriction>
+  </xs:simpleType>
+
+  <xs:simpleType name="formatType">
+    <xs:restriction base="xs:string">
+      <xs:enumeration value="hardcover"/>
+      <xs:enumeration value="paperback"/>
+      <xs:enumeration value="ebook"/>
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>

@@ -8,19 +8,19 @@ import type { FormatAdapter } from '../parsers';
 import { fileMatches, inlineSchemaReference, schemaSettings } from './association';
 import { hintsFor, resolveUri, SchemaNavigator } from './navigator';
 import { compileSchema, validate } from './validate';
+import { parseXsd, validateXml, xsdDependencies, xsdHints, XsdModel } from './xsd';
 
 export interface SchemaReference {
   uri: string;
+  /** JSON Schema for JSON/YAML, XSD for XML. */
+  kind: 'json' | 'xsd';
   /** Inline schema from `json.schemas[].schema`. */
   inline?: unknown;
 }
 
-export interface LoadedSchema {
-  uri: string;
-  name: string;
-  navigator: SchemaNavigator;
-  validator: ValidateFunction;
-}
+export type LoadedSchema =
+  | { kind: 'json'; uri: string; name: string; navigator: SchemaNavigator; validator: ValidateFunction }
+  | { kind: 'xsd'; uri: string; name: string; model: XsdModel };
 
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 const OVERRIDES_KEY = 'fileblocks.schemaOverrides';
@@ -29,12 +29,13 @@ const OVERRIDES_KEY = 'fileblocks.schemaOverrides';
 type Override = string | null;
 
 /**
- * Finds, loads and compiles the JSON Schema of a document. Shared by all open editors, so a
+ * Finds, loads and compiles the schema of a document (JSON Schema, or XSD for XML). Shared by all open editors, so a
  * schema is downloaded and compiled once. Caches are dropped when a loaded schema file is
  * saved or the schema settings change; `onDidChange` tells editors to refresh.
  */
 export class SchemaService implements vscode.Disposable {
-  private readonly documents = new Map<string, Promise<unknown>>();
+  /** Raw text of every schema file read, by URI (also tells which saved files are schemas). */
+  private readonly texts = new Map<string, Promise<string>>();
   private readonly compiled = new Map<string, Promise<LoadedSchema>>();
   private readonly changed = new vscode.EventEmitter<void>();
   private readonly subscriptions: vscode.Disposable[];
@@ -43,12 +44,12 @@ export class SchemaService implements vscode.Disposable {
   constructor(private readonly state: vscode.Memento) {
     this.subscriptions = [
       vscode.workspace.onDidSaveTextDocument((document) => {
-        if (this.documents.has(document.uri.toString())) {
+        if (this.texts.has(document.uri.toString())) {
           this.clear();
         }
       }),
       vscode.workspace.onDidChangeConfiguration((e) => {
-        if (['json.schemas', 'yaml.schemas', 'json.schemaDownload.enable'].some((section) => e.affectsConfiguration(section))) {
+        if (['json.schemas', 'yaml.schemas', 'xml.fileAssociations', 'json.schemaDownload.enable'].some((section) => e.affectsConfiguration(section))) {
           this.clear();
         }
       }),
@@ -60,20 +61,22 @@ export class SchemaService implements vscode.Disposable {
     this.changed.dispose();
   }
 
-  /** The schema that applies to a document: its own reference first, then `json.schemas` / `yaml.schemas`. */
+  /** The schema that applies to a document: the user's choice, its own reference, then the settings. */
   locate(document: vscode.TextDocument, format: string): SchemaReference | undefined {
+    const kind = format === 'xml' ? 'xsd' : 'json';
     const override = this.overrides()[document.uri.toString()];
     if (override !== undefined) {
-      return override === null ? undefined : { uri: override };
+      return override === null ? undefined : { uri: override, kind };
     }
     const inline = inlineSchemaReference(document.getText(), format);
     if (inline) {
-      return { uri: resolveUri(inline, document.uri.toString()) };
+      return { uri: resolveUri(inline, document.uri.toString()), kind };
     }
     const settings = schemaSettings(
       vscode.workspace.getConfiguration('json').get('schemas'),
       vscode.workspace.getConfiguration('yaml').get('schemas'),
       format,
+      vscode.workspace.getConfiguration('xml').get('fileAssociations'),
     );
     const relative = vscode.workspace.asRelativePath(document.uri, false);
     const folder = vscode.workspace.getWorkspaceFolder(document.uri)?.uri;
@@ -82,10 +85,10 @@ export class SchemaService implements vscode.Disposable {
         continue;
       }
       if (setting.schema !== undefined) {
-        return { uri: `inmemory://fileblocks/settings-${i}.json`, inline: setting.schema };
+        return { uri: `inmemory://fileblocks/settings-${i}.json`, kind: 'json', inline: setting.schema };
       }
       if (setting.url) {
-        return { uri: resolveUri(setting.url, folder ? `${folder.toString()}/` : document.uri.toString()) };
+        return { uri: resolveUri(setting.url, folder ? `${folder.toString()}/` : document.uri.toString()), kind };
       }
     }
     return undefined;
@@ -124,6 +127,9 @@ export class SchemaService implements vscode.Disposable {
 
   /** Problems and hints for every value of the document the schema applies to. */
   info(loaded: LoadedSchema, adapter: FormatAdapter, text: string, root: Block | null): SchemaInfo {
+    if (loaded.kind === 'xsd') {
+      return { name: loaded.name, uri: loaded.uri, problems: validateXml(root, loaded.model), hints: xsdHints(root, loaded.model) };
+    }
     const problems: SchemaProblem[] = [];
     const hints: Record<string, SchemaHint> = {};
     for (const instance of adapter.instances?.(text) ?? []) {
@@ -143,12 +149,15 @@ export class SchemaService implements vscode.Disposable {
   }
 
   private clear(): void {
-    this.documents.clear();
+    this.texts.clear();
     this.compiled.clear();
     this.changed.fire();
   }
 
   private async compile(reference: SchemaReference): Promise<LoadedSchema> {
+    if (reference.kind === 'xsd') {
+      return this.compileXsd(reference);
+    }
     const root = reference.inline ?? (await this.fetch(reference.uri));
     const documents = new Map<string, unknown>();
     const register = (uri: string, document: unknown) => {
@@ -169,23 +178,46 @@ export class SchemaService implements vscode.Disposable {
     const title = (root as { title?: unknown })?.title;
     return {
       uri: reference.uri,
-      name: typeof title === 'string' ? title : decodeURIComponent(reference.uri.split(/[/\\]/).pop() ?? reference.uri),
+      name: typeof title === 'string' ? title : fileName(reference.uri),
+      kind: 'json',
       navigator: new SchemaNavigator(withoutFragment(reference.uri), documents),
       validator,
     };
   }
 
-  private fetch(uri: string): Promise<unknown> {
-    let document = this.documents.get(uri);
-    if (!document) {
-      document = this.read(uri);
-      this.documents.set(uri, document);
-      document.catch(() => this.documents.delete(uri));
+  /** Loads an XSD and, recursively, the schemas it includes or imports. */
+  private async compileXsd(reference: SchemaReference): Promise<LoadedSchema> {
+    const documents = [];
+    const pending = [withoutFragment(reference.uri)];
+    const seen = new Set<string>();
+    while (pending.length > 0) {
+      const uri = pending.shift()!;
+      if (seen.has(uri)) {
+        continue;
+      }
+      seen.add(uri);
+      const document = parseXsd(await this.fetchText(uri));
+      documents.push(document);
+      pending.push(...xsdDependencies(document).map((location) => withoutFragment(resolveUri(location, uri))));
     }
-    return document;
+    return { kind: 'xsd', uri: reference.uri, name: fileName(reference.uri), model: new XsdModel(documents) };
   }
 
-  private async read(uri: string): Promise<unknown> {
+  private async fetch(uri: string): Promise<unknown> {
+    return parseSchemaText(await this.fetchText(uri), uri);
+  }
+
+  private fetchText(uri: string): Promise<string> {
+    let text = this.texts.get(uri);
+    if (!text) {
+      text = this.read(uri);
+      this.texts.set(uri, text);
+      text.catch(() => this.texts.delete(uri));
+    }
+    return text;
+  }
+
+  private async read(uri: string): Promise<string> {
     const parsed = vscode.Uri.parse(uri);
     if (parsed.scheme === 'http' || parsed.scheme === 'https') {
       if (!vscode.workspace.getConfiguration('json').get<boolean>('schemaDownload.enable', true)) {
@@ -195,10 +227,9 @@ export class SchemaService implements vscode.Disposable {
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} while loading ${uri}`);
       }
-      return parseSchemaText(await response.text(), uri);
+      return response.text();
     }
-    const bytes = await vscode.workspace.fs.readFile(parsed);
-    return parseSchemaText(new TextDecoder().decode(bytes), uri);
+    return new TextDecoder().decode(await vscode.workspace.fs.readFile(parsed));
   }
 }
 
@@ -212,6 +243,11 @@ function parseSchemaText(text: string, uri: string): unknown {
     throw new Error(`${uri} is not valid JSON`);
   }
   return value;
+}
+
+/** Last path segment of a URI, for display. */
+function fileName(uri: string): string {
+  return decodeURIComponent(withoutFragment(uri).split(/[/\\]/).pop() || uri);
 }
 
 function withoutFragment(uri: string): string {
