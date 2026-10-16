@@ -45,15 +45,20 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
       schemas,
       vscode.window.registerCustomEditorProvider(BlockEditorProvider.viewType, provider, { supportsMultipleEditorsPerDocument: true }),
       vscode.commands.registerCommand('fileblocks.selectSchema', () => {
-        if (provider.activeDocument) {
-          void provider.promptSelectSchema(provider.activeDocument);
+        if (provider.activeEditor) {
+          void provider.promptSelectSchema(provider.activeEditor.document);
+        }
+      }),
+      vscode.commands.registerCommand('fileblocks.exportImage', () => {
+        if (provider.activeEditor) {
+          void provider.promptExport(provider.activeEditor.webview);
         }
       }),
     );
   }
 
-  /** Document of the focused block editor, for commands run from the palette. */
-  private activeDocument: vscode.TextDocument | undefined;
+  /** The focused block editor, for commands run from the palette. */
+  private activeEditor: { document: vscode.TextDocument; webview: vscode.Webview } | undefined;
 
   private constructor(
     private readonly context: vscode.ExtensionContext,
@@ -182,6 +187,12 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
               void this.revealInText(document, adapter, message.path);
             }
             break;
+          case 'export':
+            void this.promptExport(webview);
+            break;
+          case 'image':
+            void this.saveImage(document, message);
+            break;
           case 'selectSchema':
             void this.promptSelectSchema(document);
             break;
@@ -192,22 +203,59 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
       }),
     ];
 
+    const editor = { document, webview };
     if (panel.active) {
-      this.activeDocument = document;
+      this.activeEditor = editor;
     }
     subscriptions.push(
       panel.onDidChangeViewState(() => {
         if (panel.active) {
-          this.activeDocument = document;
+          this.activeEditor = editor;
         }
       }),
     );
     panel.onDidDispose(() => {
       subscriptions.forEach((d) => d.dispose());
-      if (this.activeDocument === document && !panel.active) {
-        this.activeDocument = undefined;
+      if (this.activeEditor === editor) {
+        this.activeEditor = undefined;
       }
     });
+  }
+
+  /** Asks for PNG or SVG, then has the webview render the graph (it answers with an 'image' message). */
+  private async promptExport(webview: vscode.Webview): Promise<void> {
+    const choice = await vscode.window.showQuickPick(
+      [
+        { label: 'PNG', description: 'Bitmap image', format: 'png' as const },
+        { label: 'SVG', description: 'Vector image', format: 'svg' as const },
+      ],
+      { title: 'Fileblocks: Export Graph as Image' },
+    );
+    if (choice) {
+      const message: HostToWebview = { type: 'renderImage', format: choice.format };
+      void webview.postMessage(message);
+    }
+  }
+
+  private async saveImage(document: vscode.TextDocument, image: Extract<WebviewToHost, { type: 'image' }>): Promise<void> {
+    if (image.error || !image.dataUrl) {
+      void vscode.window.showErrorMessage(`Fileblocks: could not export the graph: ${image.error ?? 'empty image'}`);
+      return;
+    }
+    const baseName = document.uri.path.split('/').pop()?.replace(/\.[^.]+$/, '') || 'graph';
+    const target = await vscode.window.showSaveDialog({
+      title: 'Export Graph as Image',
+      defaultUri: vscode.Uri.joinPath(document.uri, '..', `${baseName}.${image.format}`),
+      filters: image.format === 'png' ? { 'PNG image': ['png'] } : { 'SVG image': ['svg'] },
+    });
+    if (!target) {
+      return;
+    }
+    const payload = image.dataUrl.slice(image.dataUrl.indexOf(',') + 1);
+    // html-to-image returns base64 for PNG and a URI-encoded string for SVG.
+    const bytes = image.format === 'png' ? Buffer.from(payload, 'base64') : new TextEncoder().encode(decodeURIComponent(payload));
+    await vscode.workspace.fs.writeFile(target, bytes);
+    void vscode.window.showInformationMessage(`Fileblocks: graph exported to ${vscode.workspace.asRelativePath(target)}`);
   }
 
   /** "Select Schema…": pick a file or URL for this document, go back to automatic detection, or turn the schema off. */

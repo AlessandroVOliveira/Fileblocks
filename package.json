@@ -56,6 +56,12 @@
         "title": "Select Schema…",
         "category": "Fileblocks",
         "icon": "$(json)"
+      },
+      {
+        "command": "fileblocks.exportImage",
+        "title": "Export Graph as Image…",
+        "category": "Fileblocks",
+        "icon": "$(export)"
       }
     ],
     "menus": {
@@ -77,6 +83,10 @@
         {
           "command": "fileblocks.selectSchema",
           "when": "activeCustomEditorId == 'fileblocks.blockEditor'"
+        },
+        {
+          "command": "fileblocks.exportImage",
+          "when": "activeCustomEditorId == 'fileblocks.blockEditor'"
         }
       ]
     }
@@ -96,6 +106,7 @@
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "domhandler": "^5.0.3",
+    "html-to-image": "^1.11.13",
     "htmlparser2": "^10.1.0",
     "jsonc-parser": "^3.3.1",
     "react": "^19.3.1",

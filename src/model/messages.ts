@@ -59,7 +59,11 @@ export type HostToWebview =
       schema?: SchemaInfo;
     }
   /** The block under the text editor's cursor (null when the cursor is outside every block). */
-  | { type: 'selection'; path: BlockPath | null };
+  | { type: 'selection'; path: BlockPath | null }
+  /** Asks the webview to render the whole graph as an image and send it back. */
+  | { type: 'renderImage'; format: ImageFormat };
+
+export type ImageFormat = 'png' | 'svg';
 
 export type WebviewToHost =
   | { type: 'ready' }
@@ -74,4 +78,8 @@ export type WebviewToHost =
   | { type: 'reveal'; path: BlockPath }
   /** Opens the "Select Schema…" picker for this document. */
   | { type: 'selectSchema' }
+  /** Asks the host to export the graph (it prompts for the format, then sends renderImage). */
+  | { type: 'export' }
+  /** The rendered image as a data URL, or the reason it failed. */
+  | { type: 'image'; format: ImageFormat; dataUrl?: string; error?: string }
   | { type: 'openText' };

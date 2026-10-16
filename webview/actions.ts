@@ -9,6 +9,9 @@ export interface EditorActions {
 
 export const ActionsContext = createContext<EditorActions | null>(null);
 
+/** True while exporting an image: virtualized rows and cards must all be rendered. */
+export const RenderAllContext = createContext(false);
+
 export interface Highlight {
   /** Ids of blocks whose key or value matches the search. */
   matchIds: ReadonlySet<string>;

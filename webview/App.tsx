@@ -1,8 +1,9 @@
 import { Background, Controls, MiniMap, ReactFlow, useReactFlow } from '@xyflow/react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { pathToId, type Block } from '../src/model/block';
-import type { HostToWebview, WebviewToHost } from '../src/model/messages';
-import { ActionsContext, HighlightContext, type EditorActions, type Highlight } from './actions';
+import type { HostToWebview, ImageFormat, WebviewToHost } from '../src/model/messages';
+import { renderGraphImage } from './exportImage';
+import { ActionsContext, HighlightContext, RenderAllContext, type EditorActions, type Highlight } from './actions';
 import { BlockNode } from './graph/BlockNode';
 import { buildGraph, HEADER_HEIGHT, nodeId, ROW_HEIGHT, type Measure } from './graph/buildGraph';
 import { layoutGraph, type BlockFlowNode } from './graph/layout';
@@ -51,7 +52,9 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
   const focusSeq = useRef(0);
   const root = useRef<Block | null>(null);
   const canvas = useRef<HTMLDivElement>(null);
-  const { setCenter, getZoom, getViewport } = useReactFlow();
+  const { setCenter, getZoom, getViewport, getNodes } = useReactFlow();
+  // Set while an image export is rendering the whole graph (virtualization off).
+  const [exportFormat, setExportFormat] = useState<ImageFormat>();
 
   const requestFocus = useCallback((target: GraphTarget | undefined, onlyIfOffscreen: boolean) => {
     if (target) {
@@ -76,6 +79,8 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
           }
         }
         setUpdate(message);
+      } else if (message.type === 'renderImage') {
+        setExportFormat(message.format);
       } else if (message.type === 'selection') {
         setSelectedId(message.path ? pathToId(message.path) : undefined);
         if (message.path && root.current) {
@@ -195,6 +200,22 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
     }
   };
 
+  // Export: wait until every card and row is in the DOM, capture, then turn virtualization back on.
+  useEffect(() => {
+    if (exportFormat === undefined) {
+      return;
+    }
+    const frame = requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        renderGraphImage(getNodes(), exportFormat)
+          .then((dataUrl) => vscode.postMessage({ type: 'image', format: exportFormat, dataUrl }))
+          .catch((error: unknown) => vscode.postMessage({ type: 'image', format: exportFormat, error: error instanceof Error ? error.message : String(error) }))
+          .finally(() => setExportFormat(undefined));
+      }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [exportFormat, getNodes, vscode]);
+
   // A target inside a collapsed subtree has no card on the canvas: expand its ancestors.
   useEffect(() => {
     if (focus && focus.seq !== handledFocus.current) {
@@ -244,6 +265,7 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
 
   return (
     <ActionsContext.Provider value={actions}>
+      <RenderAllContext.Provider value={exportFormat !== undefined}>
       <HighlightContext.Provider value={highlight}>
         <div className="app">
           <div className="toolbar">
@@ -297,6 +319,9 @@ Click to select another schema`}
               <button className="action" title="Collapse all" aria-label="Collapse all" onClick={() => setAllCollapsed(true)}>
                 <Icon name="collapse-all" />
               </button>
+              <button className="action" title="Export as image (PNG or SVG)" aria-label="Export as image" onClick={() => vscode.postMessage({ type: 'export' })}>
+                <Icon name="export" />
+              </button>
             </span>
             <button className="toolbar-button" onClick={() => vscode.postMessage({ type: 'openText' })}>
               <Icon name="go-to-file" /> Open as text
@@ -325,7 +350,7 @@ Click to select another schema`}
               nodesConnectable={false}
               deleteKeyCode={null}
               // Large graphs: skip rendering cards outside the viewport.
-              onlyRenderVisibleElements={nodes.length > VIRTUALIZE_ABOVE}
+              onlyRenderVisibleElements={exportFormat === undefined && nodes.length > VIRTUALIZE_ABOVE}
               minZoom={0.1}
               maxZoom={2}
             >
@@ -336,6 +361,7 @@ Click to select another schema`}
           </div>
         </div>
       </HighlightContext.Provider>
+      </RenderAllContext.Provider>
     </ActionsContext.Provider>
   );
 }

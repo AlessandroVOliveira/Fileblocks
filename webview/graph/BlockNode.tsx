@@ -1,7 +1,7 @@
 import { Handle, Position, useStore, type NodeProps } from '@xyflow/react';
-import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react';
+import { useContext, useEffect, useState, type DragEvent, type KeyboardEvent } from 'react';
 import type { Block, ScalarValue } from '../../src/model/block';
-import { useActions, useHighlight, type EditorActions, type Highlight } from '../actions';
+import { RenderAllContext, useActions, useHighlight, type EditorActions, type Highlight } from '../actions';
 import { displayValue, HEADER_HEIGHT, nodeId, nodeTitle, ROW_HEIGHT, rowLabel, summary } from './buildGraph';
 import { Icon } from '../Icon';
 import type { BlockFlowNode } from './layout';
@@ -15,7 +15,9 @@ export function BlockNode({ data, positionAbsoluteY }: NodeProps<BlockFlowNode>)
   const highlight = useHighlight();
   const isContainer = block.children !== undefined;
   const rows = block.children ?? [];
-  const [firstRow, lastRow] = useVisibleRows(rows.length, positionAbsoluteY);
+  const renderAll = useContext(RenderAllContext);
+  const [firstRow, lastRow] = useVisibleRows(renderAll ? 0 : rows.length, positionAbsoluteY);
+  const lastRendered = renderAll ? rows.length : lastRow;
 
   return (
     <div className={`gnode gnode--${block.kind}${highlight.selectedId === block.id ? ' gnode--selected' : ''}`} style={{ width, height }}>
@@ -56,7 +58,7 @@ export function BlockNode({ data, positionAbsoluteY }: NodeProps<BlockFlowNode>)
       )}
       {/* Long cards only render the rows in view; a spacer keeps the rendered ones at their position. */}
       {firstRow > 0 && <div style={{ height: firstRow * ROW_HEIGHT }} />}
-      {rows.slice(firstRow, lastRow).map((child, i) => (
+      {rows.slice(firstRow, lastRendered).map((child, i) => (
         <Row key={child.id} child={child} node={block} index={firstRow + i} />
       ))}
 
