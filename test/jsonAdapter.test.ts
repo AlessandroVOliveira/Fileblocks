@@ -62,6 +62,16 @@ test('move reorders object entries and keeps the value source', () => {
   assert.ok(result.includes('// comment survives'));
 });
 
+test('move keeps an inline array inline', () => {
+  const result = edit(jsonAdapter, source, { type: 'move', path: ['tags', 0], toIndex: 1 });
+  assert.equal(result, source.replace('["a", "b", "c"]', '["b", "a", "c"]'));
+});
+
+test('move swaps whole entries and leaves separators in place', () => {
+  const result = edit(jsonAdapter, source, { type: 'move', path: ['count'], toIndex: 0 });
+  assert.equal(result, source.replace('"name": "demo",\n  "count": 1,', '"count": 1,\n  "name": "demo",'));
+});
+
 test('move rejects out-of-range targets', () => {
   assert.equal(jsonAdapter.applyEdit(source, { type: 'move', path: ['tags', 0], toIndex: 3 }), undefined);
 });
@@ -69,3 +79,30 @@ test('move rejects out-of-range targets', () => {
 function stripComment(text: string): string {
   return text.replace(/^\s*\/\/.*$/m, '');
 }
+
+const compact = '{\n  "tags": ["a", "b", "c"],\n  "obj": { "x": 1 },\n  "empty": {}\n}\n';
+
+test('insert and remove keep inline containers inline', () => {
+  assert.equal(
+    edit(jsonAdapter, compact, { type: 'insert', parentPath: ['tags'], value: 'd' }),
+    compact.replace('["a", "b", "c"]', '["a", "b", "c", "d"]'),
+  );
+  assert.equal(
+    edit(jsonAdapter, compact, { type: 'insert', parentPath: ['obj'], key: 'y', value: 2 }),
+    compact.replace('{ "x": 1 }', '{ "x": 1, "y": 2 }'),
+  );
+  assert.equal(edit(jsonAdapter, compact, { type: 'remove', path: ['tags', 1] }), compact.replace('["a", "b", "c"]', '["a", "c"]'));
+  assert.equal(edit(jsonAdapter, compact, { type: 'remove', path: ['tags', 2] }), compact.replace('["a", "b", "c"]', '["a", "b"]'));
+  assert.equal(edit(jsonAdapter, compact, { type: 'remove', path: ['obj', 'x'] }), compact.replace('{ "x": 1 }', '{}'));
+});
+
+test('insert follows multi-line layout and opens empty containers', () => {
+  assert.equal(
+    edit(jsonAdapter, compact, { type: 'insert', parentPath: [], key: 'new', value: null }),
+    compact.replace('"empty": {}\n', '"empty": {},\n  "new": null\n'),
+  );
+  assert.equal(
+    edit(jsonAdapter, compact, { type: 'insert', parentPath: ['empty'], key: 'k', value: 'v' }),
+    compact.replace('"empty": {}', '"empty": {\n    "k": "v"\n  }'),
+  );
+});

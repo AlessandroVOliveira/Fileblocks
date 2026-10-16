@@ -26,15 +26,11 @@ const builds = [
   // Webview (browser)
   {
     ...shared,
-    entryPoints: ['webview/main.ts'],
+    // Imported CSS (React Flow + ours) is emitted next to it as dist/webview.css.
+    entryPoints: ['webview/main.tsx'],
     outfile: 'dist/webview.js',
     platform: 'browser',
     format: 'iife',
-  },
-  {
-    ...shared,
-    entryPoints: ['webview/styles.css'],
-    outfile: 'dist/webview.css',
   },
 ];
 

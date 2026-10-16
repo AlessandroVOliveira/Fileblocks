@@ -1,5 +1,4 @@
 import {
-  applyEdits,
   findNodeAtLocation,
   modify,
   parseTree,
@@ -10,7 +9,6 @@ import {
 } from 'jsonc-parser';
 import { pathToId, type Block, type BlockPath } from '../model/block';
 import type { BlockEdit } from '../model/messages';
-import { diffText } from './textDiff';
 import type { FormatAdapter, TextChange } from './types';
 
 export const jsonAdapter: FormatAdapter = {
@@ -40,10 +38,7 @@ function applyJsonEdit(text: string, tree: Node, edit: BlockEdit, formattingOpti
       return modify(text, edit.path, edit.value, { formattingOptions });
 
     case 'remove':
-      if (edit.path.length === 0 || !findNodeAtLocation(tree, edit.path)) {
-        return undefined;
-      }
-      return modify(text, edit.path, undefined, { formattingOptions });
+      return removeNode(tree, edit.path);
 
     case 'rename': {
       const keyNode = findPropertyKey(tree, edit.path);
@@ -57,45 +52,121 @@ function applyJsonEdit(text: string, tree: Node, edit: BlockEdit, formattingOpti
     case 'insert': {
       const parent = findNodeAtLocation(tree, edit.parentPath);
       if (parent?.type === 'array') {
-        const index = parent.children?.length ?? 0;
-        return modify(text, [...edit.parentPath, index], edit.value, { formattingOptions, isArrayInsertion: true });
+        return appendEntry(text, parent, JSON.stringify(edit.value), formattingOptions);
       }
       if (parent?.type === 'object' && edit.key !== undefined && !objectKeys(parent).includes(edit.key)) {
-        return modify(text, [...edit.parentPath, edit.key], edit.value, { formattingOptions });
+        return appendEntry(text, parent, `${JSON.stringify(edit.key)}: ${JSON.stringify(edit.value)}`, formattingOptions);
       }
       return undefined;
     }
 
     case 'move':
-      return moveNode(text, tree, edit.path, edit.toIndex, formattingOptions);
+      return moveNode(text, tree, edit.path, edit.toIndex);
   }
 }
 
-/**
- * jsonc-parser has no move operation, so: remove the node, insert a placeholder at the
- * target index, then swap the placeholder for the node's original source text. This keeps
- * the moved value's inner formatting and comments intact.
- */
-function moveNode(text: string, tree: Node, path: BlockPath, toIndex: number, formattingOptions: FormattingOptions): TextChange[] | undefined {
+// jsonc-parser's modify() reformats the whole container on insert/remove (an inline array
+// becomes multi-line), so structural edits are done on the text directly, copying the
+// separators the container already uses.
+
+/** Array items are the value nodes; object entries are the property nodes (key + value). */
+function entryOf(parent: Node, node: Node): Node {
+  return parent.type === 'object' ? node.parent! : node;
+}
+
+function endOf(node: Node): number {
+  return node.offset + node.length;
+}
+
+function removeNode(tree: Node, path: BlockPath): TextChange[] | undefined {
   const node = findNodeAtLocation(tree, path);
   const parent = findNodeAtLocation(tree, path.slice(0, -1));
-  const siblingCount = parent?.children?.length ?? 0;
-  if (!node || !parent || path.length === 0 || toIndex < 0 || toIndex >= siblingCount) {
+  if (!node || !parent || path.length === 0) {
     return undefined;
   }
+  const siblings = parent.children ?? [];
+  const entry = entryOf(parent, node);
+  const index = siblings.indexOf(entry);
+  if (index < 0) {
+    return undefined;
+  }
+  if (siblings.length === 1) {
+    // Only child: empty the container entirely, e.g. `[\n  "a"\n]` -> `[]`.
+    return [{ offset: parent.offset + 1, length: parent.length - 2, content: '' }];
+  }
+  if (index < siblings.length - 1) {
+    // Remove the entry and the separator after it.
+    return [{ offset: entry.offset, length: siblings[index + 1].offset - entry.offset, content: '' }];
+  }
+  // Last entry: remove the separator before it.
+  const previousEnd = endOf(siblings[index - 1]);
+  return [{ offset: previousEnd, length: endOf(entry) - previousEnd, content: '' }];
+}
 
-  const source = text.slice(node.offset, node.offset + node.length);
-  const placeholder = `__fileblocks_move_${Date.now()}__`;
-  const parentPath = path.slice(0, -1);
-  const last = path[path.length - 1];
+function appendEntry(text: string, parent: Node, entry: string, formatting: FormattingOptions): TextChange[] {
+  const siblings = parent.children ?? [];
+  const last = siblings[siblings.length - 1];
+  const eol = formatting.eol ?? '\n';
 
-  const removed = applyEdits(text, modify(text, path, undefined, { formattingOptions }));
-  const inserted =
-    parent.type === 'array'
-      ? applyEdits(removed, modify(removed, [...parentPath, toIndex], placeholder, { formattingOptions, isArrayInsertion: true }))
-      : applyEdits(removed, modify(removed, [...parentPath, last], placeholder, { formattingOptions, getInsertionIndex: () => toIndex }));
+  if (siblings.length >= 2) {
+    // Reuse the separator between the last two entries.
+    const separator = text.slice(endOf(siblings[siblings.length - 2]), last.offset);
+    return [{ offset: endOf(last), length: 0, content: separator + entry }];
+  }
+  if (last) {
+    // One entry: multi-line if it sits on its own line, inline otherwise.
+    const leading = text.slice(parent.offset + 1, last.offset);
+    const lineBreak = leading.lastIndexOf('\n');
+    const separator = lineBreak >= 0 ? `,${eol}${leading.slice(lineBreak + 1)}` : ', ';
+    return [{ offset: endOf(last), length: 0, content: separator + entry }];
+  }
+  // Empty container: open it up on its own lines.
+  const indent = lineIndentAt(text, parent.offset);
+  const unit = formatting.insertSpaces ? ' '.repeat(formatting.tabSize ?? 2) : '\t';
+  return [{ offset: parent.offset + 1, length: parent.length - 2, content: `${eol}${indent}${unit}${entry}${eol}${indent}` }];
+}
 
-  return diffText(text, inserted.replace(JSON.stringify(placeholder), () => source));
+function lineIndentAt(text: string, offset: number): string {
+  const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
+  return /^[ \t]*/.exec(text.slice(lineStart))![0];
+}
+
+/**
+ * Moves by rotating the source text of the siblings between the old and new position.
+ * Separators (commas, whitespace, line breaks) stay where they are, so the layout of the
+ * container is untouched: an inline array stays inline, a multi-line object stays multi-line.
+ */
+function moveNode(text: string, tree: Node, path: BlockPath, toIndex: number): TextChange[] | undefined {
+  const node = findNodeAtLocation(tree, path);
+  const parent = findNodeAtLocation(tree, path.slice(0, -1));
+  if (!node || !parent || path.length === 0) {
+    return undefined;
+  }
+  const siblings = parent.children ?? [];
+  const from = siblings.indexOf(entryOf(parent, node));
+  if (from < 0 || toIndex < 0 || toIndex >= siblings.length) {
+    return undefined;
+  }
+  if (from === toIndex) {
+    return [];
+  }
+
+  const order = siblings.map((_, i) => i);
+  order.splice(toIndex, 0, ...order.splice(from, 1));
+  const low = Math.min(from, toIndex);
+  const high = Math.max(from, toIndex);
+  const sourceOf = (n: Node) => text.slice(n.offset, n.offset + n.length);
+
+  let content = '';
+  for (let i = low; i <= high; i++) {
+    content += sourceOf(siblings[order[i]]);
+    if (i < high) {
+      content += text.slice(siblings[i].offset + siblings[i].length, siblings[i + 1].offset);
+    }
+  }
+  const startOffset = siblings[low].offset;
+  const endOffset = siblings[high].offset + siblings[high].length;
+  return [{ offset: startOffset, length: endOffset - startOffset, content }];
 }
 
 function findPropertyKey(tree: Node, path: BlockPath): Node | undefined {

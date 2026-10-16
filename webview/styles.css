@@ -1,22 +1,34 @@
-/* Uses VS Code theme variables so the editor follows the active color theme. */
+/* Uses VS Code theme variables so the canvas follows the active color theme. */
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
 
 body {
-  padding: 0 16px 16px;
   color: var(--vscode-editor-foreground);
   background: var(--vscode-editor-background);
   font-family: var(--vscode-font-family);
   font-size: var(--vscode-font-size);
 }
 
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ---------- toolbar ---------- */
+
 .toolbar {
-  position: sticky;
-  top: 0;
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 0;
-  background: var(--vscode-editor-background);
-  z-index: 1;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--vscode-panel-border);
 }
 
 .format-badge {
@@ -43,110 +55,220 @@ body {
 }
 
 .errors {
-  margin: 0 0 8px;
-  padding: 8px 8px 8px 24px;
+  margin: 0;
+  padding: 8px 8px 8px 28px;
   border-left: 3px solid var(--vscode-editorError-foreground);
   color: var(--vscode-editorError-foreground);
   background: var(--vscode-inputValidation-errorBackground);
 }
 
-.block {
-  margin: 4px 0;
+/* ---------- canvas (React Flow themed with VS Code colors) ---------- */
+
+.canvas {
+  flex: 1;
+  min-height: 0;
+}
+
+.react-flow {
+  --xy-background-color: var(--vscode-editor-background);
+  --xy-background-pattern-color: var(--vscode-editorIndentGuide-background1, var(--vscode-panel-border));
+  --xy-edge-stroke: var(--vscode-descriptionForeground);
+  --xy-handle-background-color: var(--vscode-descriptionForeground);
+  --xy-handle-border-color: var(--vscode-editor-background);
+  --xy-minimap-background-color: var(--vscode-sideBar-background);
+  --xy-minimap-mask-background-color: color-mix(in srgb, var(--vscode-editor-background) 70%, transparent);
+  --xy-minimap-node-background-color: var(--vscode-panel-border);
+  --xy-controls-button-background-color: var(--vscode-sideBar-background);
+  --xy-controls-button-background-color-hover: var(--vscode-toolbar-hoverBackground);
+  --xy-controls-button-color: var(--vscode-icon-foreground);
+  --xy-controls-button-border-color: var(--vscode-panel-border);
+  --xy-attribution-background-color: transparent;
+}
+
+.react-flow__controls-button svg {
+  fill: currentColor;
+}
+
+.react-flow__attribution a {
+  color: var(--vscode-descriptionForeground);
+}
+
+.react-flow__handle {
+  width: 6px;
+  height: 6px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* ---------- nodes ---------- */
+
+.gnode {
+  position: relative;
+  box-sizing: border-box;
   border: 1px solid var(--vscode-panel-border);
-  border-radius: 4px;
-  background: var(--vscode-sideBar-background);
+  border-radius: 6px;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
 }
 
-.block--scalar {
-  border-style: dashed;
+.gnode--object {
+  border-top: 3px solid var(--vscode-charts-blue, #3794ff);
 }
 
-.block-header {
+.gnode--array {
+  border-top: 3px solid var(--vscode-charts-purple, #b180d7);
+}
+
+.gnode--scalar {
+  border-top: 3px solid var(--vscode-charts-green, #89d185);
+}
+
+.gnode-header {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 6px;
+  box-sizing: border-box;
+  padding: 0 6px 0 10px;
+  border-bottom: 1px solid var(--vscode-panel-border);
 }
 
-.block-children {
-  padding: 0 6px 4px 20px;
-}
-
-.block-toggle {
-  width: 18px;
-  padding: 0;
-  border: none;
-  color: inherit;
-  background: none;
-  cursor: pointer;
-}
-
-.block-key {
+.gnode-title {
+  overflow: hidden;
   font-weight: 600;
-  color: var(--vscode-symbolIcon-propertyForeground, var(--vscode-editor-foreground));
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
-.block-index {
-  color: var(--vscode-descriptionForeground);
-}
-
-.block-summary {
+.gnode-summary {
   color: var(--vscode-descriptionForeground);
   font-family: var(--vscode-editor-font-family);
 }
 
-.block-value {
-  flex: 1;
-  min-width: 0;
-  padding: 2px 4px;
-  border: 1px solid var(--vscode-input-border, transparent);
-  color: var(--vscode-input-foreground);
-  background: var(--vscode-input-background);
-  font-family: var(--vscode-editor-font-family);
-}
-
-.block-value--boolean {
-  flex: none;
-}
-
-.block-value--number {
-  color: var(--vscode-debugTokenExpression-number, var(--vscode-input-foreground));
-}
-
-.block-value--null {
-  font-style: italic;
-  color: var(--vscode-descriptionForeground);
-}
-
-.block-handle {
-  padding: 0 2px;
-  border: none;
-  color: var(--vscode-descriptionForeground);
-  background: none;
-  cursor: grab;
-  opacity: 0.5;
-}
-
-.block-handle:hover,
-.block-handle:focus-visible {
-  opacity: 1;
-}
-
-.block-actions {
+.gnode-actions,
+.row-actions {
   display: flex;
-  gap: 2px;
   margin-left: auto;
   visibility: hidden;
 }
 
-.block-header:hover > .block-actions,
-.block-header:focus-within > .block-actions {
+/* Row actions float over the value so they don't take width away from it. */
+.row-actions {
+  position: absolute;
+  right: 8px;
+  border-radius: 3px;
+  background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+}
+
+.gnode-header:hover > .gnode-actions,
+.gnode-header:focus-within > .gnode-actions,
+.gnode-row:hover > .row-actions,
+.gnode-row:focus-within > .row-actions {
   visibility: visible;
 }
 
-.block-action {
-  width: 22px;
-  height: 22px;
+.gnode-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  padding: 0 6px 0 2px;
+  cursor: default;
+}
+
+.gnode-row:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.gnode-empty {
+  padding-left: 10px;
+  font-style: italic;
+  color: var(--vscode-descriptionForeground);
+}
+
+.row-handle {
+  padding: 0 2px;
+  color: var(--vscode-descriptionForeground);
+  cursor: grab;
+  opacity: 0;
+}
+
+.gnode-row:hover > .row-handle {
+  opacity: 0.7;
+}
+
+.row-key {
+  flex: none;
+  max-width: 45%;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--vscode-symbolIcon-propertyForeground, var(--vscode-editor-foreground));
+}
+
+.row-index {
+  flex: none;
+  color: var(--vscode-descriptionForeground);
+}
+
+.row-summary {
+  padding: 0 4px;
+  border: none;
+  border-radius: 3px;
+  color: var(--vscode-descriptionForeground);
+  background: none;
+  font-family: var(--vscode-editor-font-family);
+  cursor: pointer;
+}
+
+.row-summary:hover {
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.value {
+  flex: 1;
+  min-width: 0;
+  padding: 1px 4px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  color: var(--vscode-editor-foreground);
+  background: transparent;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size, inherit);
+}
+
+.value:hover,
+.value:focus {
+  border-color: var(--vscode-input-border, var(--vscode-panel-border));
+  background: var(--vscode-input-background);
+  outline: none;
+}
+
+.value:focus {
+  border-color: var(--vscode-focusBorder);
+}
+
+.value--string {
+  color: var(--vscode-debugTokenExpression-string, #ce9178);
+}
+
+.value--number {
+  color: var(--vscode-debugTokenExpression-number, #b5cea8);
+}
+
+.value--null {
+  font-style: italic;
+  color: var(--vscode-descriptionForeground);
+}
+
+.value--boolean {
+  flex: none;
+}
+
+.action {
+  width: 20px;
+  height: 20px;
   padding: 0;
   border: none;
   border-radius: 3px;
@@ -155,24 +277,16 @@ body {
   cursor: pointer;
 }
 
-.block-action:hover {
+.action:hover {
   background: var(--vscode-toolbar-hoverBackground);
 }
 
-.block-key[title] {
-  cursor: text;
+.gnode-row.drop-before {
+  box-shadow: inset 0 2px 0 0 var(--vscode-focusBorder);
 }
 
-.block.dragging {
-  opacity: 0.4;
-}
-
-.block.drop-before {
-  box-shadow: 0 -2px 0 0 var(--vscode-focusBorder);
-}
-
-.block.drop-after {
-  box-shadow: 0 2px 0 0 var(--vscode-focusBorder);
+.gnode-row.drop-after {
+  box-shadow: inset 0 -2px 0 0 var(--vscode-focusBorder);
 }
 
 button:focus-visible {
