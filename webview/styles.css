@@ -356,3 +356,16 @@ button:focus-visible {
 .react-flow__minimap-node.minimap-match {
   fill: var(--vscode-editorOverviewRuler-findMatchForeground, #d18616);
 }
+
+/* Keys and card titles reveal their source in the text editor when clicked. */
+.gnode-title,
+.row-key,
+.row-index {
+  cursor: pointer;
+}
+
+.gnode-title:hover,
+.row-key:hover,
+.row-index:hover {
+  text-decoration: underline;
+}

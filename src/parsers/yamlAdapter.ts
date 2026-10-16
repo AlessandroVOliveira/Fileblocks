@@ -165,16 +165,9 @@ function keyToString(key: unknown): string {
   return isScalar(key) ? String(key.value) : String(key);
 }
 
-function toBlock(node: unknown, path: BlockPath, label: string | number | undefined): Block {
-  const base = {
-    id: pathToId(path),
-    path,
-    label,
-    range:
-      isNode(node) && node.range
-        ? { offset: node.range[0], length: node.range[1] - node.range[0] }
-        : undefined,
-  };
+/** `range` overrides the node's own range; map entries pass one covering key and value. */
+function toBlock(node: unknown, path: BlockPath, label: string | number | undefined, range = sourceRange(node, node)): Block {
+  const base = { id: pathToId(path), path, label, range };
 
   if (isMap(node)) {
     return {
@@ -182,7 +175,7 @@ function toBlock(node: unknown, path: BlockPath, label: string | number | undefi
       kind: 'object',
       children: node.items.map((pair) => {
         const key = keyToString(pair.key);
-        return toBlock(pair.value, [...path, key], key);
+        return toBlock(pair.value, [...path, key], key, sourceRange(pair.key, pair.value));
       }),
     };
   }
@@ -201,6 +194,16 @@ function toBlock(node: unknown, path: BlockPath, label: string | number | undefi
   }
   // A key with no value, e.g. "key:"
   return { ...base, kind: 'scalar', value: null };
+}
+
+/**
+ * Span from the start of `first` to the end of `last`'s value, excluding trailing comments
+ * (yaml's range is [start, valueEnd, nodeEnd]). Falls back to whichever node has a range.
+ */
+function sourceRange(first: unknown, last: unknown): Block['range'] {
+  const start = isNode(first) && first.range ? first.range : isNode(last) ? last.range : undefined;
+  const end = isNode(last) && last.range ? last.range : start;
+  return start && end ? { offset: start[0], length: end[1] - start[0] } : undefined;
 }
 
 function toScalarValue(value: unknown): ScalarValue {

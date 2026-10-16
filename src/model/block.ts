@@ -18,7 +18,10 @@ export interface Block {
   /** Attributes of XML/HTML elements. */
   attributes?: Record<string, string>;
   children?: Block[];
-  /** Source range of the block, as offsets into the document text. */
+  /**
+   * Source span to reveal, as offsets into the document text: the whole entry (key and value)
+   * for object members, the value itself otherwise.
+   */
   range?: { offset: number; length: number };
   /** True when the block cannot be edited visually (e.g. YAML aliases). */
   readOnly?: boolean;

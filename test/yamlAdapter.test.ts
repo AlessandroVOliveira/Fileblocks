@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { findBlock } from '../src/model/block';
 import { test } from 'node:test';
 import { parse } from 'yaml';
 import { yamlAdapter } from '../src/parsers/yamlAdapter';
@@ -62,4 +63,18 @@ test('move reorders sequence items and map entries', () => {
   const entries = edit(yamlAdapter, source, { type: 'move', path: ['name'], toIndex: 4 });
   assert.deepEqual(Object.keys(parse(entries)), ['1', 'count', 'tags', 'nested', 'name']);
   assert.ok(entries.includes('name: demo # trailing comment'), entries);
+});
+
+test('block ranges cover key and value, without trailing comments', () => {
+  const { root } = yamlAdapter.parse(source);
+  const slice = (path: (string | number)[]) => {
+    const block = findBlock(root, path)!;
+    return source.slice(block.range!.offset, block.range!.offset + block.range!.length);
+  };
+  assert.equal(slice(['name']), 'name: demo');
+  assert.equal(slice(['tags', 2]), 'c');
+  assert.equal(slice(['nested']), 'nested:\n  x: 1\n');
+  // A key with no value still selects the key.
+  const empty = yamlAdapter.parse('a:\nb: 1\n').root?.children?.[0].range;
+  assert.equal('a:\nb: 1\n'.slice(empty!.offset, empty!.offset + empty!.length), 'a:');
 });

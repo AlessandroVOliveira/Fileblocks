@@ -192,12 +192,13 @@ function detectFormatting(text: string): FormattingOptions {
   return { insertSpaces: true, tabSize: indent?.length ?? 2, eol };
 }
 
-function toBlock(node: Node, path: BlockPath, label: string | number | undefined): Block {
+/** `entry` is the property node (key + value) for object members, so the range covers the whole entry. */
+function toBlock(node: Node, path: BlockPath, label: string | number | undefined, entry: Node = node): Block {
   const base = {
     id: pathToId(path),
     path,
     label,
-    range: { offset: node.offset, length: node.length },
+    range: { offset: entry.offset, length: entry.length },
   };
 
   switch (node.type) {
@@ -211,7 +212,7 @@ function toBlock(node: Node, path: BlockPath, label: string | number | undefined
             return [];
           }
           const key = String(keyNode.value);
-          return [toBlock(valueNode, [...path, key], key)];
+          return [toBlock(valueNode, [...path, key], key, property)];
         }),
       };
     case 'array':

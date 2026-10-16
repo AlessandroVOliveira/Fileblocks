@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { findBlock } from '../src/model/block';
 import { test } from 'node:test';
 import { jsonAdapter } from '../src/parsers/jsonAdapter';
 import { edit } from './helpers';
@@ -105,4 +106,15 @@ test('insert follows multi-line layout and opens empty containers', () => {
     edit(jsonAdapter, compact, { type: 'insert', parentPath: ['empty'], key: 'k', value: 'v' }),
     compact.replace('"empty": {}', '"empty": {\n    "k": "v"\n  }'),
   );
+});
+
+test('block ranges cover whole entries for object members and values for array items', () => {
+  const { root } = jsonAdapter.parse(compact);
+  const slice = (path: (string | number)[]) => {
+    const block = findBlock(root, path)!;
+    return compact.slice(block.range!.offset, block.range!.offset + block.range!.length);
+  };
+  assert.equal(slice(['tags']), '"tags": ["a", "b", "c"]');
+  assert.equal(slice(['tags', 1]), '"b"');
+  assert.equal(slice(['obj', 'x']), '"x": 1');
 });

@@ -70,6 +70,7 @@ Os adapters não dependem da API do `vscode`, então são testados com testes un
 |---|---|
 | Navegar | Arraste o fundo para mover, roda do mouse para zoom, minimapa e botões no canto |
 | Buscar | **Ctrl+F** ou o campo na toolbar: procura em chaves e valores; Enter / Shift+Enter (ou ↑/↓) navegam e centralizam o resultado, expandindo nós recolhidos; Esc limpa |
+| Ver no texto | Clique na chave de uma linha ou no título de um card: seleciona o trecho no editor de texto ao lado (o foco fica no grafo) |
 | Editar valor | Clique no valor e dê Enter (Esc cancela; checkbox para booleanos) |
 | Recolher/expandir | Clique no resumo `{n}` / `[n]` da linha |
 | Adicionar | Botão **+** no cabeçalho do card (o VS Code pergunta a chave e o tipo) |
@@ -86,7 +87,7 @@ Tudo passa pelo documento, então **Ctrl+Z** desfaz qualquer ação.
 - [x] Adicionar, remover, renomear e reordenar blocos (drag & drop, Alt+↑/↓)
 - [x] Visualização em grafo (React Flow + dagre) com pan, zoom e minimapa
 - [x] Busca no grafo (destacar, navegar e centralizar resultados)
-- [ ] Clicar num nó revela o trecho no editor de texto
+- [x] Clicar num nó revela o trecho no editor de texto
 - [ ] Performance com arquivos grandes (virtualização / recolher níveis profundos por padrão)
 - [ ] XML e HTML com parser que guarda posições
 - [x] Detecção de indentação no JSON

@@ -78,6 +78,11 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
               void this.promptRename(document, adapter, message.path);
             }
             break;
+          case 'reveal':
+            if (adapter) {
+              void this.revealInText(document, adapter, message.path);
+            }
+            break;
           case 'openText':
             void vscode.commands.executeCommand('vscode.openWith', document.uri, 'default', vscode.ViewColumn.Beside);
             break;
@@ -132,6 +137,23 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
       return;
     }
     await this.applyEdit(document, adapter, { type: 'rename', path, newKey });
+  }
+
+  /** Selects the block's source in the text editor beside the graph, reusing one if it is already visible. */
+  private async revealInText(document: vscode.TextDocument, adapter: FormatAdapter, path: BlockPath): Promise<void> {
+    const range = findBlock(adapter.parse(document.getText()).root, path)?.range;
+    if (!range) {
+      return;
+    }
+    const selection = new vscode.Range(document.positionAt(range.offset), document.positionAt(range.offset + range.length));
+    const visible = vscode.window.visibleTextEditors.find((editor) => editor.document.uri.toString() === document.uri.toString());
+    const editor = await vscode.window.showTextDocument(document, {
+      viewColumn: visible?.viewColumn ?? vscode.ViewColumn.Beside,
+      // Keep focus on the graph so the user can keep clicking through it.
+      preserveFocus: true,
+      selection,
+    });
+    editor.revealRange(selection, vscode.TextEditorRevealType.InCenterIfOutsideViewport);
   }
 
   private async applyEdit(document: vscode.TextDocument, adapter: FormatAdapter, edit: BlockEdit): Promise<void> {

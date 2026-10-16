@@ -23,7 +23,9 @@ export function BlockNode({ data }: NodeProps<BlockFlowNode>) {
         className={`gnode-header${isContainer && search.matchIds.has(block.id) ? ' gnode-header--match' : ''}`}
         style={{ height: HEADER_HEIGHT }}
       >
-        <span className="gnode-title" title={nodeTitle(block)}>{nodeTitle(block)}</span>
+        <span className="gnode-title" title={`${nodeTitle(block)} · Click to show in text`} onClick={() => reveal(actions, block)}>
+          {nodeTitle(block)}
+        </span>
         {isContainer && <span className="gnode-summary">{summary(block)}</span>}
         <span className={`gnode-actions ${INTERACTIVE}`}>
           {isContainer && (
@@ -129,7 +131,8 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
       </span>
       <span
         className={typeof child.label === 'number' ? 'row-index' : 'row-key'}
-        title={canRename ? 'Double-click to rename' : undefined}
+        title={canRename ? 'Click to show in text · Double-click to rename' : 'Click to show in text'}
+        onClick={() => reveal(actions, child)}
         onDoubleClick={canRename ? () => rename(actions, child) : undefined}
       >
         {String(child.label)}
@@ -224,6 +227,10 @@ function ActionButton({ text, title, onClick }: { text: string; title: string; o
 
 function setValue(actions: EditorActions, block: Block, value: ScalarValue): void {
   actions.post({ type: 'edit', edit: { type: 'setValue', path: block.path, value } });
+}
+
+function reveal(actions: EditorActions, block: Block): void {
+  actions.post({ type: 'reveal', path: block.path });
 }
 
 function rename(actions: EditorActions, block: Block): void {

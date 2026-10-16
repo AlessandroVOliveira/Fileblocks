@@ -33,4 +33,6 @@ export type WebviewToHost =
   | { type: 'add'; parentPath: BlockPath }
   /** Asks the host to prompt for a new key, then rename the block. */
   | { type: 'rename'; path: BlockPath }
+  /** Selects the block's source in a text editor beside the graph. */
+  | { type: 'reveal'; path: BlockPath }
   | { type: 'openText' };
