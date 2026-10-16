@@ -1,174 +1,99 @@
 # Fileblocks
 
-Extensão do VS Code para visualizar e editar arquivos estruturados (JSON, YAML, TOML, XML, HTML) como um
-grafo de nós em um canvas, no estilo do [JSON Crack](https://jsoncrack.com/editor), com edição direta nos nós.
+**See and edit structured files as a graph, right inside VS Code.**
 
-## Desenvolvimento
+Fileblocks opens JSON, YAML, TOML, XML and HTML files as an interactive node graph, in the spirit of
+[JSON Crack](https://jsoncrack.com), but fully editable: change values, add, rename, remove and reorder
+entries directly on the cards. Every change is written back to the file as a minimal text edit, so your
+formatting, comments and layout are preserved, and **Ctrl+Z** undoes anything.
 
-```bash
-npm install
-npm run build      # gera dist/extension.js, dist/webview.js e dist/webview.css
-npm run watch      # rebuild automático
-npm run typecheck  # checagem de tipos (o esbuild não checa tipos)
-npm test           # testes unitários dos adapters (node:test)
-npm run package    # build de produção + fileblocks-<versão>.vsix
-```
+![A JSON file with a JSON Schema: cards, edges, required keys and validation errors](images/json-schema.png)
 
-Para instalar no VS Code do dia a dia (sem F5): `code --install-extension fileblocks-0.0.1.vsix`,
-ou **Extensions → ⋯ → Install from VSIX…**. Para atualizar, gere o `.vsix` de novo e reinstale.
+## Features
 
-Para rodar, aperte **F5** no VS Code. Ele abre uma janela de Extension Development Host com a pasta `samples/`.
-Abra um arquivo e use o ícone na barra de título, ou clique com o botão direito no explorer e escolha
-**Fileblocks: Open in Block Editor**. O editor está registrado com `priority: "option"`, então ele
-não substitui o editor de texto padrão.
+- **Graph view** of objects, arrays and elements, with automatic layout, pan, zoom and a minimap.
+- **Edit in place**: values (checkbox for booleans, dropdown for enums), add entries, rename keys,
+  remove, reorder by drag & drop or <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd>, and change a value's type.
+- **Formatting is kept**: inline arrays stay inline, comments stay where they are, YAML quoting and
+  anchors survive, XML entities are escaped only where you edited.
+- **Search** keys and values (<kbd>Ctrl</kbd>+<kbd>F</kbd>): matches are highlighted and the canvas
+  centers on each one, expanding collapsed nodes.
+- **Text and graph in sync**: click a key to select it in the text editor; move the cursor in the text
+  and the matching node lights up in the graph.
+- **Schema validation and hints**:
+  - JSON Schema for JSON, YAML and TOML (from `$schema`, the `yaml-language-server` modeline, Taplo's
+    `#:schema`, or the `json.schemas` / `yaml.schemas` settings);
+  - XSD and DTD for XML (from `xsi:schemaLocation`, `<!DOCTYPE>`, or `xml.fileAssociations`);
+  - or pick one per file with **Fileblocks: Select Schema…**.
 
-## Arquitetura
+  Problems are marked on the cards and counted in the toolbar; required keys get a `*`, descriptions
+  show as tooltips, enums become dropdowns, and **+** suggests the properties the schema defines.
+- **Large files**: deep levels start collapsed, and only the visible cards and rows are rendered.
+- **Export** the whole graph as PNG or SVG.
 
-```
-src/
-  extension.ts                 ativação, registro do editor e dos comandos
-  editor/
-    BlockEditorProvider.ts     CustomTextEditorProvider: liga o TextDocument à webview
-    webviewHtml.ts             HTML da webview (CSP + nonce)
-  model/
-    block.ts                   modelo de blocos comum a todos os formatos
-    convert.ts                 conversão de valores entre tipos
-    messages.ts                protocolo de mensagens host <-> webview
-  parsers/
-    types.ts                   interface FormatAdapter (parse + applyEdit)
-    index.ts                   escolhe o adapter pelo languageId ou pela extensão
-    textDiff.ts                reduz uma reescrita do texto ao trecho que mudou
-    textEdits.ts               edições textuais compartilhadas (rotacionar irmãos, indentação)
-    jsonAdapter.ts             jsonc-parser + edições textuais que copiam a formatação existente
-    yamlAdapter.ts             yaml (Document API, preserva comentários; vários documentos)
-    tomlAdapter.ts             TOML (toml-eslint-parser; tabelas, chaves com ponto, inline, [[arrays]])
-    markupAdapter.ts           XML e HTML (htmlparser2 + leitor de tags com posições dos atributos)
-  schema/
-    association.ts             qual schema se aplica ($schema, modeline YAML, #:schema, xsi:*, settings)
-    navigator.ts               percorre o schema por caminho: dicas, enum, obrigatórios, sugestões, defaults
-    validate.ts                validação com ajv e mapeamento dos erros para caminhos de blocos
-    xsd.ts                     subconjunto de XSD + validação/dicas/sugestões de XML (compartilhadas com o DTD)
-    dtd.ts                     DTD: <!ELEMENT>, <!ATTLIST>, entidades de parâmetro -> mesmo modelo do XSD
-    SchemaService.ts           carrega (arquivo/https), compila e faz cache dos schemas; escolha manual
-webview/                       React + React Flow
-  main.tsx                     ponto de entrada
-  App.tsx                      canvas, toolbar, estado (recolhidos) e mensagens
-  actions.ts                   contexto com as ações (post, recolher)
-  graph/
-    buildGraph.ts              Block -> nós e arestas (função pura, testada)
-    layout.ts                  layout automático da esquerda para a direita (dagre)
-    BlockNode.tsx              card de um objeto/array: linhas editáveis, ações, drag & drop
-    search.ts                  busca em chaves e valores (função pura, testada)
-    targets.ts                 onde um bloco aparece (card + linha) e o que expandir para mostrá-lo
-    collapse.ts                quais níveis recolher ao abrir arquivos grandes
-  exportImage.ts               exporta o grafo inteiro como PNG/SVG (html-to-image)
-  SearchBox.tsx                campo de busca da toolbar
-  styles.css                   tema do VS Code aplicado ao canvas e aos nós
-test/                          testes dos adapters e do grafo
-samples/                       arquivos para testar
-```
+![An XML file validated against an XSD](images/xml-xsd.png)
 
-**Grafo:** cada objeto ou array vira um card. Valores simples são linhas editáveis dentro do card;
-filhos objeto/array saem da linha correspondente por uma aresta até o próprio card. As alturas são
-fixas (cabeçalho + N linhas) e as larguras são medidas com canvas, então o layout é calculado antes
-de renderizar.
+## Getting started
 
-**Fluxo:** o `TextDocument` é a fonte da verdade, então undo/redo, salvar e o estado "modificado"
-funcionam nativamente. A cada mudança no documento, o adapter faz o parse do texto em `Block`s e o host
-manda o resultado para a webview. Uma edição na webview vira um `BlockEdit`. O adapter converte esse
-edit em `TextChange`s, que são aplicadas como `WorkspaceEdit`.
+1. Open a `.json`, `.jsonc`, `.yaml`, `.yml`, `.toml`, `.xml`, `.html` or `.htm` file.
+2. Click the **Open in Block Editor** icon in the editor title bar, or right-click the file in the
+   Explorer and choose **Fileblocks: Open in Block Editor**.
+3. Use **Open as text** in the toolbar to keep the text editor side by side with the graph.
 
-Os adapters não dependem da API do `vscode`, então são testados com testes unitários puros (`test/`).
+Fileblocks is registered as an optional editor, so it never replaces your text editor. To always open a
+file type with it, use **Reopen Editor With… → Configure default editor**.
 
-## Uso
+## Using the graph
 
-| Ação | Como |
+| Action | How |
 |---|---|
-| Navegar | Arraste o fundo para mover, roda do mouse para zoom, minimapa e botões no canto |
-| Buscar | **Ctrl+F** ou o campo na toolbar: procura em chaves e valores; Enter / Shift+Enter (ou ↑/↓) navegam e centralizam o resultado, expandindo nós recolhidos; Esc limpa |
-| Ver no texto | Clique na chave de uma linha ou no título de um card: seleciona o trecho no editor de texto ao lado (o foco fica no grafo) |
-| Seguir o cursor | Com o texto aberto ao lado, mover o cursor destaca o nó correspondente no grafo (expande recolhidos e centraliza se estiver fora da tela) |
-| Editar valor | Clique no valor e dê Enter (Esc cancela; checkbox para booleanos) |
-| Recolher/expandir | Clique no resumo `{n}` / `[n]` da linha |
-| Adicionar | Botão **+** no cabeçalho do card (o VS Code pergunta a chave e o tipo) |
-| Renomear | Duplo clique na chave ou botão **✎** |
-| Remover | Botão **×** na linha ou no cabeçalho do card |
-| Reordenar | Arraste a linha pelo **⠿** ou Alt+↑/↓ com o valor focado |
-| Expandir/recolher tudo | Botões na toolbar |
-| Exportar imagem | Botão de exportar na toolbar ou **Fileblocks: Export Graph as Image…** (PNG ou SVG; o grafo inteiro, sem os ícones) |
-| Escolher schema | Clique no nome do schema (ou em "No schema") na toolbar, ou **Fileblocks: Select Schema…**: arquivo, URL, detecção automática ou nenhum |
-| Mudar o tipo | Botão **⇄** na linha ou no cabeçalho do card (ex.: `"8080"` → `8080`; converter um objeto/array com itens pede confirmação) |
+| Navigate | Drag the background to pan, mouse wheel to zoom, minimap and controls in the corner |
+| Edit a value | Click it, type, press <kbd>Enter</kbd> (<kbd>Esc</kbd> cancels) |
+| Add | **+** on a card (with a schema, its properties are suggested first) |
+| Rename | Double-click a key, or the pencil button |
+| Remove | The × button on a row or card |
+| Reorder | Drag a row by its handle, or <kbd>Alt</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> |
+| Change type | The ⇄ button (for example `"8080"` → `8080`) |
+| Collapse / expand | Click a row's `{n}` / `[n]` summary, or the toolbar buttons for everything |
+| Show in text | Click a key or a card title |
+| Search | <kbd>Ctrl</kbd>+<kbd>F</kbd>, then <kbd>Enter</kbd> / <kbd>Shift</kbd>+<kbd>Enter</kbd> |
+| Schema problems | Click the problem count in the toolbar to jump to the next one |
 
-Tudo passa pelo documento, então **Ctrl+Z** desfaz qualquer ação.
+## Formats
 
-**YAML com vários documentos** (`---`): cada documento aparece como uma linha do card `documents`.
-Dá para editar dentro de cada documento, e só o texto dele é regravado; os documentos em si não são
-removidos ou reordenados pelo grafo.
+| Format | Notes |
+|---|---|
+| JSON / JSONC | Comments and trailing commas are supported. |
+| YAML | Comments, anchors and quoting are preserved; multi-document files show one card per document. |
+| TOML | Tables, dotted keys, inline tables and arrays, and arrays of tables. |
+| XML | Elements are cards, attributes are `@name` rows, text is `#text`; text-only elements are shown inline. |
+| HTML | Same as XML, with HTML rules: implied end tags, void elements, unquoted and valueless attributes. |
 
-**XML e HTML:** cada elemento vira um card `<tag>`; os atributos são linhas `@nome` e os textos
-linhas `#text`, editáveis. Elementos sem atributos que só têm texto (`<li>JSON</li>`) ou estão vazios
-(`<a/>`, `<br>`) não ganham card: são uma linha do card pai com o texto editável; o **+** da linha
-adiciona atributo ou filho (e aí o elemento passa a ter card). O **+** pergunta se é elemento filho, atributo ou texto; renomear uma tag
-muda a de abertura e a de fechamento. Comentários, `<?xml ?>` e `<!DOCTYPE>` não aparecem mas ficam
-no arquivo. Em HTML, tags com fechamento implícito (`<li>` sem `</li>`), atributos sem valor
-(`disabled`) e sem aspas (`class=list`) são respeitados.
+## Commands
 
-**TOML:** tabelas `[a]`, chaves com ponto (`a.b = 1`), tabelas e arrays inline e arrays de tabelas
-`[[a]]` viram objetos e arrays. Dá para editar valores (datas continuam sem aspas), renomear chaves e
-cabeçalhos, remover entradas e seções inteiras, inserir `chave = valor` numa tabela ou itens em `{…}` /
-`[…]`, e reordenar entradas da mesma tabela. Objetos que só existem por chaves com ponto não recebem
-novas chaves pelo grafo (não há um lugar único no texto para elas).
+| Command | Description |
+|---|---|
+| **Fileblocks: Open in Block Editor** | Opens the current file as a graph. |
+| **Fileblocks: Select Schema…** | Chooses a schema file or URL for the current file, or turns schema checking off. |
+| **Fileblocks: Export Graph as Image…** | Saves the whole graph as PNG or SVG. |
 
-**JSON Schema** (JSON, YAML e TOML): o schema vem da escolha manual (**Select Schema…**), do `"$schema"`
-do próprio arquivo, do comentário `# yaml-language-server: $schema=...` no YAML, da diretiva
-`#:schema ...` no TOML, ou das configurações `json.schemas` / `yaml.schemas`.
-Schemas remotos são baixados (respeitando `json.schemaDownload.enable`). Com um schema:
-valores inválidos e propriedades obrigatórias faltando ficam marcados (a mensagem aparece no tooltip);
-a toolbar mostra o schema e o número de problemas (clique para ir ao próximo); chaves obrigatórias
-ganham `*` e as descrições aparecem no tooltip; `enum` vira uma lista de opções; e o **+** sugere as
-propriedades do schema (obrigatórias primeiro), já com o valor padrão. Veja `samples/app.json`.
+## Settings it reads
 
-**XSD** (XML): o schema vem de `xsi:noNamespaceSchemaLocation` / `xsi:schemaLocation`, da configuração
-`xml.fileAssociations` ou do **Select Schema…**. É um subconjunto de XSD avaliado sobre os blocos:
-elementos e atributos permitidos e obrigatórios, quantidade máxima, `enumeration`, tipos básicos
-(inteiros, decimais, booleano, datas) e facetas (min/max, tamanho, `pattern`); `include`/`import` são
-carregados. Não verifica a ordem dentro de `sequence`, namespaces nem restrições de identidade.
-Documentação do XSD aparece nos tooltips e o **+** sugere atributos e filhos válidos. Veja `samples/catalog.xml`.
+Fileblocks has no settings of its own; it reuses the ones you may already have:
+`json.schemas`, `json.schemaDownload.enable`, `yaml.schemas` and `xml.fileAssociations`.
 
-**DTD** (XML): vem do `<!DOCTYPE raiz SYSTEM "x.dtd">` (ou `PUBLIC "…" "x.dtd"`), do subconjunto interno
-`<!DOCTYPE raiz [ … ]>` (os dois juntos também), de `xml.fileAssociations` ou do **Select Schema…** com um
-`.dtd`. Entende `EMPTY`, `ANY`, `(#PCDATA)`, conteúdo misto e modelos com `,` `|` `?` `*` `+`; atributos
-`#REQUIRED` / `#IMPLIED` / `#FIXED` e listas de valores; e entidades de parâmetro (`%nome;`). Usa a mesma
-validação, dicas e sugestões do XSD; o comentário logo antes de um `<!ELEMENT>` vira a documentação do
-elemento. Se o XML tiver XSD e DTD, o XSD tem prioridade. Veja `samples/notes.xml`.
+## Known limitations
 
-**Arquivos grandes:** na primeira abertura, se o grafo passar de 150 cards, só os primeiros níveis
-ficam expandidos (a toolbar avisa); a busca e o cursor do texto expandem o que for preciso. Acima de
-100 cards, o canvas só renderiza os cards visíveis, e cards com mais de 100 linhas só renderizam as
-linhas visíveis. Exportar como PNG um grafo muito grande pode demorar e sai com resolução reduzida
-(máx. 8000 px por lado); para esses casos, prefira SVG.
+- XSD support is a practical subset: element order inside a `sequence`, namespaces and identity
+  constraints are not checked. DTD external parameter entities are not loaded.
+- In TOML, objects that only exist through dotted keys (`a.b = 1`) can't receive new keys from the graph.
+- Exporting a very large graph as PNG is slow and reduced in resolution; prefer SVG for those.
 
-## Roadmap
+## Feedback
 
-- [x] Estrutura, Custom Editor, modelo de blocos
-- [x] JSON e YAML: visualizar e editar valores escalares
-- [x] Adicionar, remover, renomear e reordenar blocos (drag & drop, Alt+↑/↓)
-- [x] Visualização em grafo (React Flow + dagre) com pan, zoom e minimapa
-- [x] Busca no grafo (destacar, navegar e centralizar resultados)
-- [x] Clicar num nó revela o trecho no editor de texto
-- [x] Performance com arquivos grandes (virtualização / recolher níveis profundos por padrão)
-- [x] Virtualizar as linhas dentro de cards enormes (ex.: um array com milhares de itens)
-- [x] XML e HTML com parser que guarda posições
-- [x] XML/HTML: mostrar elementos só com texto (`<li>JSON</li>`) como uma linha, sem card próprio
-- [x] Detecção de indentação no JSON
-- [x] YAML multi-documento
-- [x] Mudar o tipo de um valor (ex.: string → number)
-- [x] Ícones (codicons) no lugar dos glifos de texto
-- [x] Sincronizar a seleção entre o bloco e o texto
-- [x] Edição guiada por JSON Schema (validação, dicas, enum, sugestões)
-- [x] XSD para XML (subconjunto)
-- [x] Expandir/recolher tudo, exportar PNG/SVG, escolher schema manualmente
-- [x] TOML
-- [x] DTD para XML
-- [x] Testes unitários dos adapters
-- [x] Empacotar como .vsix
+Bugs and ideas are welcome on [GitHub](https://github.com/AlessandroVOliveira/Fileblocks/issues).
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how the extension is built (in Portuguese).
+
+## License
+
+[MIT](LICENSE)

@@ -1,10 +1,37 @@
 {
   "name": "fileblocks",
   "displayName": "Fileblocks",
-  "description": "Visual block editor for structured files (JSON, YAML, TOML, XML, HTML).",
-  "version": "0.0.1",
-  "publisher": "fileblocks-dev",
+  "description": "See and edit JSON, YAML, TOML, XML and HTML as an editable node graph, with JSON Schema, XSD and DTD validation.",
+  "version": "0.1.0",
+  "publisher": "alessandrovoliveira",
   "license": "MIT",
+  "icon": "images/icon.png",
+  "galleryBanner": {
+    "color": "#1b1c26",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/AlessandroVOliveira/Fileblocks.git"
+  },
+  "bugs": {
+    "url": "https://github.com/AlessandroVOliveira/Fileblocks/issues"
+  },
+  "homepage": "https://github.com/AlessandroVOliveira/Fileblocks#readme",
+  "keywords": [
+    "json",
+    "yaml",
+    "toml",
+    "xml",
+    "html",
+    "graph",
+    "visualizer",
+    "editor",
+    "json schema",
+    "xsd",
+    "dtd",
+    "json crack"
+  ],
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -99,8 +126,9 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc --noEmit",
     "vscode:prepublish": "node esbuild.mjs --production",
-    "package": "vsce package --no-dependencies --allow-missing-repository",
-    "test": "esbuild \"test/*.test.ts\" --bundle --platform=node --main-fields=module,main --outdir=out/test --log-level=warning && node --test \"out/test/*.test.js\""
+    "package": "vsce package --no-dependencies",
+    "test": "esbuild \"test/*.test.ts\" --bundle --platform=node --main-fields=module,main --outdir=out/test --log-level=warning && node --test \"out/test/*.test.js\"",
+    "publish": "vsce publish --no-dependencies"
   },
   "dependencies": {
     "@dagrejs/dagre": "^1.1.8",

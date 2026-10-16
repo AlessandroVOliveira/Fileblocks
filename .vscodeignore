@@ -11,3 +11,6 @@ test/**
 out/**
 .gitignore
 .gitattributes
+images/**
+!images/icon.png
+CONTRIBUTING.md
