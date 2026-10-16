@@ -2,6 +2,8 @@
 
 import type { Block, BlockPath, ScalarValue } from './block';
 
+export type { ScalarValue };
+
 export interface ParseError {
   message: string;
   offset?: number;
@@ -11,7 +13,8 @@ export interface ParseError {
 export type InsertValue = ScalarValue | Record<string, never> | never[];
 
 export type BlockEdit =
-  | { type: 'setValue'; path: BlockPath; value: ScalarValue }
+  /** Replaces a value; an object/array value replaces it with an empty one (used to change types). */
+  | { type: 'setValue'; path: BlockPath; value: InsertValue }
   | { type: 'remove'; path: BlockPath }
   | { type: 'rename'; path: BlockPath; newKey: string }
   /** Appends to the parent; `key` is required when the parent is an object. */
@@ -36,6 +39,8 @@ export type WebviewToHost =
   | { type: 'add'; parentPath: BlockPath }
   /** Asks the host to prompt for a new key, then rename the block. */
   | { type: 'rename'; path: BlockPath }
+  /** Asks the host to prompt for a new type, then convert the value. */
+  | { type: 'changeType'; path: BlockPath }
   /** Selects the block's source in a text editor beside the graph. */
   | { type: 'reveal'; path: BlockPath }
   | { type: 'openText' };

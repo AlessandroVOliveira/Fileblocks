@@ -2,7 +2,7 @@ import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react';
 import type { Block, ScalarValue } from '../../src/model/block';
 import { useActions, useHighlight, type EditorActions, type Highlight } from '../actions';
-import { displayValue, HEADER_HEIGHT, nodeId, nodeTitle, ROW_HEIGHT, summary } from './buildGraph';
+import { displayValue, HEADER_HEIGHT, nodeId, nodeTitle, ROW_HEIGHT, rowLabel, summary } from './buildGraph';
 import type { BlockFlowNode } from './layout';
 
 // `nodrag nopan` stop React Flow from treating clicks/drags on interactive parts as canvas panning.
@@ -28,15 +28,16 @@ export function BlockNode({ data }: NodeProps<BlockFlowNode>) {
         </span>
         {isContainer && <span className="gnode-summary">{summary(block)}</span>}
         <span className={`gnode-actions ${INTERACTIVE}`}>
-          {isContainer && (
+          {isContainer && !block.readOnly && (
             <ActionButton
               text="+"
               title={block.kind === 'array' ? 'Add item' : 'Add entry'}
               onClick={() => actions.post({ type: 'add', parentPath: block.path })}
             />
           )}
+          {!block.readOnly && <ActionButton text="⇄" title="Change type" onClick={() => changeType(actions, block)} />}
           {parent?.kind === 'object' && <ActionButton text="✎" title="Rename" onClick={() => rename(actions, block)} />}
-          {parent && <ActionButton text="×" title="Remove" onClick={() => remove(actions, block)} />}
+          {parent && !parent.readOnly && <ActionButton text="×" title="Remove" onClick={() => remove(actions, block)} />}
         </span>
       </div>
 
@@ -72,10 +73,12 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
   const isContainer = child.children !== undefined;
   const collapsed = isContainer && actions.isCollapsed(child.id);
   const canRename = node.kind === 'object';
-  const accepts = () => dragSource?.node.id === node.id;
+  // Rows of a read-only container (the list of YAML documents) can't be moved or removed.
+  const fixed = !!node.readOnly;
+  const accepts = () => !fixed && dragSource?.node.id === node.id;
 
   const onKeyDown = (e: KeyboardEvent) => {
-    if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+    if (!fixed && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
       e.preventDefault();
       move(actions, child, node, index, index + (e.key === 'ArrowUp' ? -1 : 1));
     }
@@ -114,9 +117,9 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
       onDrop={onDrop}
     >
       <span
-        className="row-handle"
-        title="Drag to reorder (Alt+↑/↓)"
-        draggable
+        className={`row-handle${fixed ? ' row-handle--fixed' : ''}`}
+        title={fixed ? undefined : 'Drag to reorder (Alt+↑/↓)'}
+        draggable={!fixed}
         onDragStart={(e) => {
           dragSource = { child, node, index };
           e.dataTransfer.effectAllowed = 'move';
@@ -135,7 +138,7 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
         onClick={() => reveal(actions, child)}
         onDoubleClick={canRename ? () => rename(actions, child) : undefined}
       >
-        {String(child.label)}
+        {rowLabel(child)}
       </span>
       {isContainer ? (
         <button className="row-summary" title={collapsed ? 'Expand' : 'Collapse'} onClick={() => actions.toggleCollapsed(child.id)}>
@@ -145,8 +148,9 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
         <ScalarInput block={child} />
       )}
       <span className="row-actions">
+        {!child.readOnly && <ActionButton text="⇄" title="Change type" onClick={() => changeType(actions, child)} />}
         {canRename && <ActionButton text="✎" title="Rename" onClick={() => rename(actions, child)} />}
-        <ActionButton text="×" title="Remove" onClick={() => remove(actions, child)} />
+        {!fixed && <ActionButton text="×" title="Remove" onClick={() => remove(actions, child)} />}
       </span>
       {isContainer && !collapsed && (
         <Handle
@@ -235,6 +239,10 @@ function setValue(actions: EditorActions, block: Block, value: ScalarValue): voi
 
 function reveal(actions: EditorActions, block: Block): void {
   actions.post({ type: 'reveal', path: block.path });
+}
+
+function changeType(actions: EditorActions, block: Block): void {
+  actions.post({ type: 'changeType', path: block.path });
 }
 
 function rename(actions: EditorActions, block: Block): void {

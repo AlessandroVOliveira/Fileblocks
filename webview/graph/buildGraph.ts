@@ -9,7 +9,7 @@ const MAX_WIDTH = 420;
 const MAX_VALUE_WIDTH = 220;
 /** Room for row padding, drag handle, gaps and input padding (row actions float over the row). */
 const ROW_CHROME = 64;
-const HEADER_CHROME = 96;
+const HEADER_CHROME = 120;
 
 export type BlockNodeData = {
   block: Block;
@@ -72,10 +72,18 @@ export function nodeId(block: Block): string {
 }
 
 export function nodeTitle(block: Block): string {
+  if (block.caption !== undefined) {
+    return block.caption;
+  }
   if (block.label === undefined) {
     return 'root';
   }
   return typeof block.label === 'number' ? `[${block.label}]` : block.label;
+}
+
+/** Text shown for a block as a row of its parent card. */
+export function rowLabel(block: Block): string {
+  return block.caption ?? String(block.label ?? '');
 }
 
 export function summary(block: Block): string {
@@ -91,7 +99,7 @@ function nodeWidth(block: Block, measure: Measure): number {
   let width = measure(nodeTitle(block), 'label') + measure(summary(block), 'value') + HEADER_CHROME;
   const rows = block.children ?? [block];
   for (const row of rows) {
-    const key = row === block ? '' : String(row.label ?? '');
+    const key = row === block ? '' : rowLabel(row);
     const value = row.children !== undefined ? summary(row) : displayValue(row);
     width = Math.max(width, measure(key, 'label') + Math.min(measure(value, 'value'), MAX_VALUE_WIDTH) + ROW_CHROME);
   }

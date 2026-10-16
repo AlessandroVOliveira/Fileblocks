@@ -23,8 +23,10 @@ export interface Block {
    * for object members, the value itself otherwise.
    */
   range?: { offset: number; length: number };
-  /** True when the block cannot be edited visually (e.g. YAML aliases). */
+  /** True when the block cannot be edited visually (e.g. YAML aliases, the list of YAML documents). */
   readOnly?: boolean;
+  /** Display name overriding the label (e.g. "document 1" in multi-document YAML). */
+  caption?: string;
 }
 
 export function pathToId(path: BlockPath): string {

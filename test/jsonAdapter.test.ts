@@ -118,3 +118,8 @@ test('block ranges cover whole entries for object members and values for array i
   assert.equal(slice(['tags', 1]), '"b"');
   assert.equal(slice(['obj', 'x']), '"x": 1');
 });
+
+test('setValue can change a value type', () => {
+  assert.equal(edit(jsonAdapter, compact, { type: 'setValue', path: ['obj', 'x'], value: '1' }), compact.replace('"x": 1', '"x": "1"'));
+  assert.equal(edit(jsonAdapter, compact, { type: 'setValue', path: ['tags'], value: {} }), compact.replace('["a", "b", "c"]', '{}'));
+});

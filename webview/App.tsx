@@ -6,6 +6,7 @@ import { ActionsContext, HighlightContext, type EditorActions, type Highlight } 
 import { BlockNode } from './graph/BlockNode';
 import { buildGraph, HEADER_HEIGHT, nodeId, ROW_HEIGHT, type Measure } from './graph/buildGraph';
 import { layoutGraph, type BlockFlowNode } from './graph/layout';
+import { initialCollapse } from './graph/collapse';
 import { findMatches } from './graph/search';
 import { idsToReveal, targetFor, type GraphTarget } from './graph/targets';
 import { SearchBox } from './SearchBox';
@@ -30,10 +31,15 @@ interface FocusRequest {
 const nodeTypes = { block: BlockNode };
 /** Rows closer than this to the canvas edge count as off screen. */
 const SCREEN_MARGIN = 40;
+/** Card count above which React Flow only renders the cards in view. */
+const VIRTUALIZE_ABOVE = 100;
 
 export function App({ vscode }: { vscode: VsCodeApi }) {
   const [update, setUpdate] = useState<UpdateMessage>();
   const [collapsed, setCollapsed] = useState(() => new Set(vscode.getState()?.collapsed ?? []));
+  // Set when a large file was opened with its deeper levels collapsed.
+  const [autoCollapsedDepth, setAutoCollapsedDepth] = useState<number>();
+  const firstUpdate = useRef(true);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string>();
@@ -55,6 +61,17 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
       const message = event.data;
       if (message.type === 'update') {
         root.current = message.root;
+        // Large file opened for the first time (no saved collapse state): start with deep levels collapsed,
+        // before the first render so the full graph is never laid out.
+        if (firstUpdate.current && message.root) {
+          firstUpdate.current = false;
+          const initial = vscode.getState() ? undefined : initialCollapse(message.root);
+          if (initial?.depth !== undefined) {
+            setCollapsed(new Set(initial.ids));
+            vscode.setState({ collapsed: initial.ids });
+            setAutoCollapsedDepth(initial.depth);
+          }
+        }
         setUpdate(message);
       } else if (message.type === 'selection') {
         setSelectedId(message.path ? pathToId(message.path) : undefined);
@@ -180,6 +197,11 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
               total={matches.length}
               onNavigate={onNavigate}
             />
+            {autoCollapsedDepth !== undefined && (
+              <span className="toolbar-note" title="Expand nodes with their {n} / [n] summaries">
+                Large file: showing the first {autoCollapsedDepth + 1} level{autoCollapsedDepth === 0 ? '' : 's'}
+              </span>
+            )}
             <button className="toolbar-button" onClick={() => vscode.postMessage({ type: 'openText' })}>
               Open as text
             </button>
@@ -206,6 +228,8 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
               nodesDraggable={false}
               nodesConnectable={false}
               deleteKeyCode={null}
+              // Large graphs: skip rendering cards outside the viewport.
+              onlyRenderVisibleElements={nodes.length > VIRTUALIZE_ABOVE}
               minZoom={0.1}
               maxZoom={2}
             >

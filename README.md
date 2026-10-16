@@ -28,6 +28,7 @@ src/
     webviewHtml.ts             HTML da webview (CSP + nonce)
   model/
     block.ts                   modelo de blocos comum a todos os formatos
+    convert.ts                 conversão de valores entre tipos
     messages.ts                protocolo de mensagens host <-> webview
   parsers/
     types.ts                   interface FormatAdapter (parse + applyEdit)
@@ -47,6 +48,7 @@ webview/                       React + React Flow
     BlockNode.tsx              card de um objeto/array: linhas editáveis, ações, drag & drop
     search.ts                  busca em chaves e valores (função pura, testada)
     targets.ts                 onde um bloco aparece (card + linha) e o que expandir para mostrá-lo
+    collapse.ts                quais níveis recolher ao abrir arquivos grandes
   SearchBox.tsx                campo de busca da toolbar
   styles.css                   tema do VS Code aplicado ao canvas e aos nós
 test/                          testes dos adapters e do grafo
@@ -79,8 +81,17 @@ Os adapters não dependem da API do `vscode`, então são testados com testes un
 | Renomear | Duplo clique na chave ou botão **✎** |
 | Remover | Botão **×** na linha ou no cabeçalho do card |
 | Reordenar | Arraste a linha pelo **⠿** ou Alt+↑/↓ com o valor focado |
+| Mudar o tipo | Botão **⇄** na linha ou no cabeçalho do card (ex.: `"8080"` → `8080`; converter um objeto/array com itens pede confirmação) |
 
 Tudo passa pelo documento, então **Ctrl+Z** desfaz qualquer ação.
+
+**YAML com vários documentos** (`---`): cada documento aparece como uma linha do card `documents`.
+Dá para editar dentro de cada documento, e só o texto dele é regravado; os documentos em si não são
+removidos ou reordenados pelo grafo.
+
+**Arquivos grandes:** na primeira abertura, se o grafo passar de 150 cards, só os primeiros níveis
+ficam expandidos (a toolbar avisa); a busca e o cursor do texto expandem o que for preciso. Acima de
+100 cards, o canvas só renderiza os cards visíveis.
 
 ## Roadmap
 
@@ -90,11 +101,12 @@ Tudo passa pelo documento, então **Ctrl+Z** desfaz qualquer ação.
 - [x] Visualização em grafo (React Flow + dagre) com pan, zoom e minimapa
 - [x] Busca no grafo (destacar, navegar e centralizar resultados)
 - [x] Clicar num nó revela o trecho no editor de texto
-- [ ] Performance com arquivos grandes (virtualização / recolher níveis profundos por padrão)
+- [x] Performance com arquivos grandes (virtualização / recolher níveis profundos por padrão)
+- [ ] Virtualizar as linhas dentro de cards enormes (ex.: um array com milhares de itens)
 - [ ] XML e HTML com parser que guarda posições
 - [x] Detecção de indentação no JSON
-- [ ] YAML multi-documento
-- [ ] Mudar o tipo de um valor (ex.: string → number)
+- [x] YAML multi-documento
+- [x] Mudar o tipo de um valor (ex.: string → number)
 - [ ] Ícones (codicons) no lugar dos glifos de texto
 - [x] Sincronizar a seleção entre o bloco e o texto
 - [ ] Edição guiada por schema (JSON Schema / XSD)

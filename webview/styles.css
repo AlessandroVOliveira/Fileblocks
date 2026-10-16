@@ -379,3 +379,15 @@ button:focus-visible {
 .gnode-row.row--selected {
   box-shadow: inset 0 0 0 1px var(--vscode-focusBorder);
 }
+
+.toolbar-note {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.row-handle--fixed {
+  visibility: hidden;
+}

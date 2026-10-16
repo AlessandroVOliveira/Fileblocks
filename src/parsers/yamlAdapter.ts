@@ -6,7 +6,7 @@ import {
   isPair,
   isScalar,
   isSeq,
-  parseDocument,
+  parseAllDocuments,
   type Document,
   type Pair,
   type YAMLMap,
@@ -21,32 +21,75 @@ export const yamlAdapter: FormatAdapter = {
   id: 'yaml',
 
   parse(text) {
-    // TODO: multi-document files (---); only the first document is shown for now.
-    const doc = parseDocument(text);
+    const docs = parseAllDocuments(text);
+    const errors = docs.flatMap((doc) => doc.errors.map((e) => ({ message: e.message, offset: e.pos[0] })));
+    if (docs.length <= 1) {
+      const contents = docs[0]?.contents;
+      return { root: contents ? toBlock(contents, [], undefined) : null, errors };
+    }
+    // Several documents (---): a read-only list whose items are the documents; paths start with the document index.
     return {
-      root: doc.contents ? toBlock(doc.contents, [], undefined) : null,
-      errors: doc.errors.map((e) => ({ message: e.message, offset: e.pos[0] })),
+      root: {
+        id: pathToId([]),
+        kind: 'array',
+        path: [],
+        caption: 'documents',
+        readOnly: true,
+        range: { offset: 0, length: text.length },
+        children: docs.map((doc, i) => ({
+          ...(doc.contents ? toBlock(doc.contents, [i], i) : { id: pathToId([i]), kind: 'scalar' as const, path: [i], label: i, value: null }),
+          caption: `document ${i + 1}`,
+          range: { offset: doc.range[0], length: doc.range[2] - doc.range[0] },
+        })),
+      },
+      errors,
     };
   },
 
   applyEdit(text, edit) {
-    const doc = parseDocument(text);
-    if (doc.errors.length > 0 || !applyYamlEdit(doc, edit)) {
+    const docs = parseAllDocuments(text);
+    if (docs.length === 0 || docs.some((doc) => doc.errors.length > 0)) {
       return undefined;
     }
-    return diffText(text, doc.toString());
+    const options = { flowCollectionPadding: usesFlowPadding(text) };
+    if (docs.length === 1) {
+      return applyYamlEdit(docs[0], edit) ? diffText(text, docs[0].toString(options)) : undefined;
+    }
+
+    // Multi-document: the first path segment picks the document; only that document's text is rewritten.
+    const [index, ...rest] = 'parentPath' in edit ? edit.parentPath : edit.path;
+    const doc = typeof index === 'number' ? docs[index] : undefined;
+    if (!doc || (rest.length === 0 && edit.type !== 'insert' && edit.type !== 'setValue')) {
+      // Documents themselves can't be removed, renamed or reordered from the graph.
+      return undefined;
+    }
+    const scoped: BlockEdit = 'parentPath' in edit ? { ...edit, parentPath: rest } : { ...edit, path: rest };
+    if (!applyYamlEdit(doc, scoped)) {
+      return undefined;
+    }
+    const [start, , end] = doc.range;
+    return diffText(text, text.slice(0, start) + doc.toString(options) + text.slice(end));
   },
 };
+
+/** yaml writes `[ 1, 2 ]` by default; keep `[1, 2]` if that's what the file uses. */
+function usesFlowPadding(text: string): boolean {
+  const padded = (text.match(/[[{] \S/g) ?? []).length;
+  const tight = (text.match(/[[{][^\s\]}]/g) ?? []).length;
+  return padded >= tight;
+}
 
 /** Mutates the document in place, reusing existing nodes so comments, anchors and quoting survive. */
 function applyYamlEdit(doc: Document, edit: BlockEdit): boolean {
   switch (edit.type) {
     case 'setValue': {
+      const isScalarValue = edit.value === null || typeof edit.value !== 'object';
       if (edit.path.length === 0) {
-        if (!isScalar(doc.contents)) {
-          return false;
+        if (isScalar(doc.contents) && isScalarValue) {
+          doc.contents.value = edit.value;
+        } else {
+          doc.contents = doc.createNode(edit.value);
         }
-        doc.contents.value = edit.value;
         return true;
       }
       const slot = locate(doc, edit.path);
@@ -54,7 +97,8 @@ function applyYamlEdit(doc: Document, edit: BlockEdit): boolean {
         return false;
       }
       const current = slotValue(slot);
-      if (isScalar(current)) {
+      if (isScalar(current) && isScalarValue) {
+        // Mutate the scalar in place so its comment and anchor survive (yaml re-quotes as needed).
         current.value = edit.value;
       } else {
         setSlotValue(slot, doc.createNode(edit.value));

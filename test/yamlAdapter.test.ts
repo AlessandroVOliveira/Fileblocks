@@ -78,3 +78,42 @@ test('block ranges cover key and value, without trailing comments', () => {
   const empty = yamlAdapter.parse('a:\nb: 1\n').root?.children?.[0].range;
   assert.equal('a:\nb: 1\n'.slice(empty!.offset, empty!.offset + empty!.length), 'a:');
 });
+
+test('setValue can change a value type, re-quoting as needed', () => {
+  assert.equal(edit(yamlAdapter, 'p: "8080"\nq: x\n', { type: 'setValue', path: ['p'], value: 8080 }), 'p: 8080\nq: x\n');
+  assert.equal(edit(yamlAdapter, 'p: x\n', { type: 'setValue', path: ['p'], value: 'true' }), 'p: "true"\n');
+  assert.deepEqual(parse(edit(yamlAdapter, source, { type: 'setValue', path: ['nested'], value: [] })).nested, []);
+});
+
+test('edits keep the flow collection style of the file', () => {
+  const tight = 'a: [1, 2]\nb: 1\n';
+  assert.equal(edit(yamlAdapter, tight, { type: 'setValue', path: ['b'], value: 2 }), 'a: [1, 2]\nb: 2\n');
+  const padded = 'a: [ 1, 2 ]\nb: 1\n';
+  assert.equal(edit(yamlAdapter, padded, { type: 'setValue', path: ['b'], value: 2 }), 'a: [ 1, 2 ]\nb: 2\n');
+});
+
+const multi = 'a: 1 # first\n---\nb: [1, 2]\n...\n---\n# lead\nc:\n  d: x\n';
+
+test('multi-document files show one row per document', () => {
+  const { root, errors } = yamlAdapter.parse(multi);
+  assert.deepEqual(errors, []);
+  assert.equal(root?.readOnly, true);
+  assert.deepEqual(root?.children?.map((c) => c.caption), ['document 1', 'document 2', 'document 3']);
+  assert.deepEqual(root?.children?.[2].children?.[0].children?.[0].path, [2, 'c', 'd']);
+  const d = findBlock(root, [2, 'c', 'd'])!;
+  assert.equal(multi.slice(d.range!.offset, d.range!.offset + d.range!.length), 'd: x');
+});
+
+test('multi-document edits rewrite only the edited document', () => {
+  assert.equal(edit(yamlAdapter, multi, { type: 'setValue', path: [2, 'c', 'd'], value: 'y' }), multi.replace('d: x', 'd: y'));
+  assert.equal(
+    edit(yamlAdapter, multi, { type: 'insert', parentPath: [1, 'b'], value: 3 }),
+    multi.replace('b: [1, 2]', 'b: [1, 2, 3]'),
+  );
+  assert.equal(edit(yamlAdapter, multi, { type: 'rename', path: [0, 'a'], newKey: 'z' }), multi.replace('a: 1', 'z: 1'));
+});
+
+test('documents themselves cannot be removed or moved', () => {
+  assert.equal(yamlAdapter.applyEdit(multi, { type: 'remove', path: [1] }), undefined);
+  assert.equal(yamlAdapter.applyEdit(multi, { type: 'move', path: [1], toIndex: 0 }), undefined);
+});
