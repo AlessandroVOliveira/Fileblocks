@@ -32,6 +32,8 @@ interface FocusRequest {
 const nodeTypes = { block: BlockNode };
 /** Rows closer than this to the canvas edge count as off screen. */
 const SCREEN_MARGIN = 40;
+/** Formats that can be checked against a schema (JSON Schema, XSD). */
+const SCHEMA_FORMATS = new Set(['json', 'yaml', 'xml']);
 /** Card count above which React Flow only renders the cards in view. */
 const VIRTUALIZE_ABOVE = 100;
 
@@ -109,6 +111,31 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
       }),
     [updateCollapsed],
   );
+
+  /** Collapse every container below the root, or expand everything. */
+  const setAllCollapsed = (collapse: boolean) => {
+    const ids: string[] = [];
+    const visit = (block: Block, depth: number) => {
+      if (block.children !== undefined) {
+        if (depth > 0) {
+          ids.push(block.id);
+        }
+        block.children.forEach((child) => visit(child, depth + 1));
+      }
+    };
+    if (update?.root) {
+      visit(update.root, 0);
+    }
+    updateCollapsed((next) => {
+      next.clear();
+      if (collapse) {
+        // Keep the root's direct children visible as rows; collapse them so their cards are hidden.
+        ids.forEach((id) => next.add(id));
+      }
+      return true;
+    });
+    setAutoCollapsedDepth(undefined);
+  };
 
   const actions = useMemo<EditorActions>(
     () => ({ post: (message) => vscode.postMessage(message), isCollapsed: (id) => collapsed.has(id), toggleCollapsed }),
@@ -228,15 +255,24 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
               total={matches.length}
               onNavigate={onNavigate}
             />
-            {schema && (
-              <span
+            {schema ? (
+              <button
                 className={`schema-chip${schema.error ? ' schema-chip--error' : ''}`}
-                title={schema.error ? `Could not load the schema: ${schema.error}` : `JSON Schema: ${schema.uri}`}
+                title={`${schema.error ? `Could not load the schema: ${schema.error}` : `Schema: ${schema.uri}`}
+Click to select another schema`}
+                onClick={() => vscode.postMessage({ type: 'selectSchema' })}
               >
                 <Icon name={schema.error ? 'warning' : 'json'} />
                 {schema.name}
                 {schema.loading && ' (loading…)'}
-              </span>
+              </button>
+            ) : (
+              update && SCHEMA_FORMATS.has(update.format) && (
+                <button className="schema-chip schema-chip--none" title="Select a schema for this file" onClick={() => vscode.postMessage({ type: 'selectSchema' })}>
+                  <Icon name="json" />
+                  No schema
+                </button>
+              )
             )}
             {schema && !schema.loading && !schema.error && (
               <button
@@ -254,6 +290,14 @@ export function App({ vscode }: { vscode: VsCodeApi }) {
                 Large file: showing the first {autoCollapsedDepth + 1} level{autoCollapsedDepth === 0 ? '' : 's'}
               </span>
             )}
+            <span className="toolbar-group">
+              <button className="action" title="Expand all" aria-label="Expand all" onClick={() => setAllCollapsed(false)}>
+                <Icon name="expand-all" />
+              </button>
+              <button className="action" title="Collapse all" aria-label="Collapse all" onClick={() => setAllCollapsed(true)}>
+                <Icon name="collapse-all" />
+              </button>
+            </span>
             <button className="toolbar-button" onClick={() => vscode.postMessage({ type: 'openText' })}>
               <Icon name="go-to-file" /> Open as text
             </button>

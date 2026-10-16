@@ -50,6 +50,12 @@
         "title": "Open in Block Editor",
         "category": "Fileblocks",
         "icon": "$(symbol-structure)"
+      },
+      {
+        "command": "fileblocks.selectSchema",
+        "title": "Select Schema…",
+        "category": "Fileblocks",
+        "icon": "$(json)"
       }
     ],
     "menus": {
@@ -65,6 +71,12 @@
           "command": "fileblocks.openBlockEditor",
           "when": "resourceExtname =~ /^\\.(json|jsonc|ya?ml|xml|html?)$/",
           "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "fileblocks.selectSchema",
+          "when": "activeCustomEditorId == 'fileblocks.blockEditor'"
         }
       ]
     }

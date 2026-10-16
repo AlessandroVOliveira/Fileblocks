@@ -23,6 +23,10 @@ export interface LoadedSchema {
 }
 
 const DOWNLOAD_TIMEOUT_MS = 15_000;
+const OVERRIDES_KEY = 'fileblocks.schemaOverrides';
+
+/** A schema chosen with "Select Schema…": a URI, or null for "no schema". */
+type Override = string | null;
 
 /**
  * Finds, loads and compiles the JSON Schema of a document. Shared by all open editors, so a
@@ -36,7 +40,7 @@ export class SchemaService implements vscode.Disposable {
   private readonly subscriptions: vscode.Disposable[];
   readonly onDidChange = this.changed.event;
 
-  constructor() {
+  constructor(private readonly state: vscode.Memento) {
     this.subscriptions = [
       vscode.workspace.onDidSaveTextDocument((document) => {
         if (this.documents.has(document.uri.toString())) {
@@ -58,6 +62,10 @@ export class SchemaService implements vscode.Disposable {
 
   /** The schema that applies to a document: its own reference first, then `json.schemas` / `yaml.schemas`. */
   locate(document: vscode.TextDocument, format: string): SchemaReference | undefined {
+    const override = this.overrides()[document.uri.toString()];
+    if (override !== undefined) {
+      return override === null ? undefined : { uri: override };
+    }
     const inline = inlineSchemaReference(document.getText(), format);
     if (inline) {
       return { uri: resolveUri(inline, document.uri.toString()) };
@@ -81,6 +89,26 @@ export class SchemaService implements vscode.Disposable {
       }
     }
     return undefined;
+  }
+
+  /** Sets (URI), disables (null) or clears (undefined) the schema chosen for a document. */
+  async setOverride(document: vscode.Uri, override: Override | undefined): Promise<void> {
+    const overrides = { ...this.overrides() };
+    if (override === undefined) {
+      delete overrides[document.toString()];
+    } else {
+      overrides[document.toString()] = override;
+    }
+    await this.state.update(OVERRIDES_KEY, overrides);
+    this.changed.fire();
+  }
+
+  hasOverride(document: vscode.Uri): boolean {
+    return document.toString() in this.overrides();
+  }
+
+  private overrides(): Record<string, Override> {
+    return this.state.get<Record<string, Override>>(OVERRIDES_KEY, {});
   }
 
   load(reference: SchemaReference): Promise<LoadedSchema> {

@@ -72,4 +72,6 @@ export type WebviewToHost =
   | { type: 'changeType'; path: BlockPath }
   /** Selects the block's source in a text editor beside the graph. */
   | { type: 'reveal'; path: BlockPath }
+  /** Opens the "Select Schema…" picker for this document. */
+  | { type: 'selectSchema' }
   | { type: 'openText' };

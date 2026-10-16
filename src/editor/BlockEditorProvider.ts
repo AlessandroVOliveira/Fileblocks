@@ -39,14 +39,21 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
   static readonly viewType = 'fileblocks.blockEditor';
 
   static register(context: vscode.ExtensionContext): vscode.Disposable {
-    const schemas = new SchemaService();
+    const schemas = new SchemaService(context.workspaceState);
+    const provider = new BlockEditorProvider(context, schemas);
     return vscode.Disposable.from(
       schemas,
-      vscode.window.registerCustomEditorProvider(BlockEditorProvider.viewType, new BlockEditorProvider(context, schemas), {
-        supportsMultipleEditorsPerDocument: true,
+      vscode.window.registerCustomEditorProvider(BlockEditorProvider.viewType, provider, { supportsMultipleEditorsPerDocument: true }),
+      vscode.commands.registerCommand('fileblocks.selectSchema', () => {
+        if (provider.activeDocument) {
+          void provider.promptSelectSchema(provider.activeDocument);
+        }
       }),
     );
   }
+
+  /** Document of the focused block editor, for commands run from the palette. */
+  private activeDocument: vscode.TextDocument | undefined;
 
   private constructor(
     private readonly context: vscode.ExtensionContext,
@@ -175,6 +182,9 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
               void this.revealInText(document, adapter, message.path);
             }
             break;
+          case 'selectSchema':
+            void this.promptSelectSchema(document);
+            break;
           case 'openText':
             void vscode.commands.executeCommand('vscode.openWith', document.uri, 'default', vscode.ViewColumn.Beside);
             break;
@@ -182,7 +192,61 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
       }),
     ];
 
-    panel.onDidDispose(() => subscriptions.forEach((d) => d.dispose()));
+    if (panel.active) {
+      this.activeDocument = document;
+    }
+    subscriptions.push(
+      panel.onDidChangeViewState(() => {
+        if (panel.active) {
+          this.activeDocument = document;
+        }
+      }),
+    );
+    panel.onDidDispose(() => {
+      subscriptions.forEach((d) => d.dispose());
+      if (this.activeDocument === document && !panel.active) {
+        this.activeDocument = undefined;
+      }
+    });
+  }
+
+  /** "Select Schema…": pick a file or URL for this document, go back to automatic detection, or turn the schema off. */
+  private async promptSelectSchema(document: vscode.TextDocument): Promise<void> {
+    type Choice = { label: string; action: 'file' | 'url' | 'auto' | 'none' };
+    const items: Choice[] = [
+      { label: '$(file) Browse for a schema file…', action: 'file' },
+      { label: '$(globe) Enter a schema URL…', action: 'url' },
+      ...(this.schemas.hasOverride(document.uri) ? [{ label: "$(discard) Use the file's own schema or the settings", action: 'auto' as const }] : []),
+      { label: '$(circle-slash) No schema for this file', action: 'none' },
+    ];
+    const choice = await vscode.window.showQuickPick(items, { title: 'Fileblocks: Select Schema' });
+    if (!choice) {
+      return;
+    }
+    if (choice.action === 'file') {
+      const [file] =
+        (await vscode.window.showOpenDialog({
+          title: 'Select Schema',
+          canSelectMany: false,
+          defaultUri: vscode.Uri.joinPath(document.uri, '..'),
+          filters: { Schemas: ['json', 'xsd', 'yaml', 'yml'], 'All files': ['*'] },
+        })) ?? [];
+      if (file) {
+        await this.schemas.setOverride(document.uri, file.toString());
+      }
+    } else if (choice.action === 'url') {
+      const url = await vscode.window.showInputBox({
+        title: 'Select Schema',
+        prompt: 'Schema URL',
+        placeHolder: 'https://json.schemastore.org/package.json',
+        validateInput: (value) => (/^https?:\/\/\S+$/.test(value) ? undefined : 'Enter an http(s) URL'),
+      });
+      if (url) {
+        await this.schemas.setOverride(document.uri, url);
+      }
+    } else {
+      await this.schemas.setOverride(document.uri, choice.action === 'none' ? null : undefined);
+    }
   }
 
   private schemaInfo(
