@@ -8,19 +8,25 @@ import type { FormatAdapter } from '../parsers';
 import { fileMatches, inlineSchemaReference, schemaSettings } from './association';
 import { hintsFor, resolveUri, SchemaNavigator } from './navigator';
 import { compileSchema, validate } from './validate';
-import { parseXsd, validateXml, xsdDependencies, xsdHints, XsdModel } from './xsd';
+import { doctypeOf, DtdModel } from './dtd';
+import { parseXsd, validateXml, xsdDependencies, xsdHints, XsdModel, type ElementSchema } from './xsd';
 
 export interface SchemaReference {
   uri: string;
-  /** JSON Schema for JSON/YAML, XSD for XML. */
-  kind: 'json' | 'xsd';
-  /** Inline schema from `json.schemas[].schema`. */
+  /** JSON Schema for JSON/YAML/TOML; XSD or DTD for XML. */
+  kind: 'json' | 'xsd' | 'dtd';
+  /** Inline schema: `json.schemas[].schema`, or a DOCTYPE's internal subset (DTD text). */
   inline?: unknown;
+  /** Identity for caching and change detection (the URI, plus the internal subset for DTDs). */
+  key: string;
 }
 
 export type LoadedSchema =
   | { kind: 'json'; uri: string; name: string; navigator: SchemaNavigator; validator: ValidateFunction }
-  | { kind: 'xsd'; uri: string; name: string; model: XsdModel };
+  | { kind: 'xsd' | 'dtd'; uri: string; name: string; model: ElementSchema };
+
+/** In-memory URI for a DOCTYPE that only has an internal subset. */
+const INTERNAL_DTD_URI = 'inmemory://fileblocks/internal-subset.dtd';
 
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 const OVERRIDES_KEY = 'fileblocks.schemaOverrides';
@@ -63,14 +69,22 @@ export class SchemaService implements vscode.Disposable {
 
   /** The schema that applies to a document: the user's choice, its own reference, then the settings. */
   locate(document: vscode.TextDocument, format: string): SchemaReference | undefined {
-    const kind = format === 'xml' ? 'xsd' : 'json';
+    // XML schemas are XSD unless the file is a .dtd.
+    const kindOf = (uri: string): SchemaReference['kind'] => (format !== 'xml' ? 'json' : /\.dtd(#|$)/i.test(uri) ? 'dtd' : 'xsd');
+    const reference = (uri: string): SchemaReference => ({ uri, kind: kindOf(uri), key: uri });
     const override = this.overrides()[document.uri.toString()];
     if (override !== undefined) {
-      return override === null ? undefined : { uri: override, kind };
+      return override === null ? undefined : reference(override);
     }
-    const inline = inlineSchemaReference(document.getText(), format);
+    const text = document.getText();
+    const inline = inlineSchemaReference(text, format);
     if (inline) {
-      return { uri: resolveUri(inline, document.uri.toString()), kind };
+      return reference(resolveUri(inline, document.uri.toString()));
+    }
+    const doctype = format === 'xml' ? doctypeOf(text) : undefined;
+    if (doctype && (doctype.systemId || doctype.internalSubset)) {
+      const uri = doctype.systemId ? resolveUri(doctype.systemId, document.uri.toString()) : INTERNAL_DTD_URI;
+      return { uri, kind: 'dtd', inline: doctype.internalSubset, key: `${uri}\n${doctype.internalSubset ?? ''}` };
     }
     const settings = schemaSettings(
       vscode.workspace.getConfiguration('json').get('schemas'),
@@ -85,10 +99,11 @@ export class SchemaService implements vscode.Disposable {
         continue;
       }
       if (setting.schema !== undefined) {
-        return { uri: `inmemory://fileblocks/settings-${i}.json`, kind: 'json', inline: setting.schema };
+        const uri = `inmemory://fileblocks/settings-${i}.json`;
+        return { uri, kind: 'json', inline: setting.schema, key: uri };
       }
       if (setting.url) {
-        return { uri: resolveUri(setting.url, folder ? `${folder.toString()}/` : document.uri.toString()), kind };
+        return reference(resolveUri(setting.url, folder ? `${folder.toString()}/` : document.uri.toString()));
       }
     }
     return undefined;
@@ -115,19 +130,19 @@ export class SchemaService implements vscode.Disposable {
   }
 
   load(reference: SchemaReference): Promise<LoadedSchema> {
-    let loaded = this.compiled.get(reference.uri);
+    let loaded = this.compiled.get(reference.key);
     if (!loaded) {
       loaded = this.compile(reference);
-      this.compiled.set(reference.uri, loaded);
+      this.compiled.set(reference.key, loaded);
       // Don't cache failures: a later refresh retries (e.g. after fixing the schema or going online).
-      loaded.catch(() => this.compiled.delete(reference.uri));
+      loaded.catch(() => this.compiled.delete(reference.key));
     }
     return loaded;
   }
 
   /** Problems and hints for every value of the document the schema applies to. */
   info(loaded: LoadedSchema, adapter: FormatAdapter, text: string, root: Block | null): SchemaInfo {
-    if (loaded.kind === 'xsd') {
+    if (loaded.kind !== 'json') {
       return { name: loaded.name, uri: loaded.uri, problems: validateXml(root, loaded.model), hints: xsdHints(root, loaded.model) };
     }
     const problems: SchemaProblem[] = [];
@@ -158,6 +173,9 @@ export class SchemaService implements vscode.Disposable {
     if (reference.kind === 'xsd') {
       return this.compileXsd(reference);
     }
+    if (reference.kind === 'dtd') {
+      return this.compileDtd(reference);
+    }
     const root = reference.inline ?? (await this.fetch(reference.uri));
     const documents = new Map<string, unknown>();
     const register = (uri: string, document: unknown) => {
@@ -183,6 +201,14 @@ export class SchemaService implements vscode.Disposable {
       navigator: new SchemaNavigator(withoutFragment(reference.uri), documents),
       validator,
     };
+  }
+
+  /** A DOCTYPE's internal subset, then its external DTD (in XML the first declaration wins). */
+  private async compileDtd(reference: SchemaReference): Promise<LoadedSchema> {
+    const internal = typeof reference.inline === 'string' ? reference.inline : '';
+    const external = reference.uri === INTERNAL_DTD_URI ? '' : await this.fetchText(withoutFragment(reference.uri));
+    const name = reference.uri === INTERNAL_DTD_URI ? 'DOCTYPE (internal)' : fileName(reference.uri);
+    return { kind: 'dtd', uri: reference.uri, name, model: new DtdModel(`${internal}\n${external}`) };
   }
 
   /** Loads an XSD and, recursively, the schemas it includes or imports. */

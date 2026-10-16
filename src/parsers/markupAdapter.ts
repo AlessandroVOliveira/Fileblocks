@@ -18,7 +18,7 @@ import type { FormatAdapter, TextChange } from './types';
 export function createMarkupAdapter(id: 'xml' | 'html'): FormatAdapter {
   const xmlMode = id === 'xml';
   const parse = (text: string) =>
-    parseDocument(text, { xmlMode, withStartIndices: true, withEndIndices: true, decodeEntities: true });
+    parseDocument(maskDoctype(text), { xmlMode, withStartIndices: true, withEndIndices: true, decodeEntities: true });
 
   return {
     id,
@@ -32,6 +32,15 @@ export function createMarkupAdapter(id: 'xml' | 'html'): FormatAdapter {
       return applyMarkupEdit(text, parse(text), edit, xmlMode);
     },
   };
+}
+
+/**
+ * htmlparser2 ends `<!DOCTYPE … [ internal subset ]>` at the first `>` inside the subset, leaking the
+ * rest as text. The DOCTYPE is never shown as a block, so blank it out with spaces before parsing:
+ * offsets of everything else stay the same.
+ */
+function maskDoctype(text: string): string {
+  return text.replace(/<!DOCTYPE[^[>]*(?:\[[\s\S]*?\])?\s*>/i, (doctype) => doctype.replace(/[^\n]/g, ' '));
 }
 
 // ---------- source positions ----------

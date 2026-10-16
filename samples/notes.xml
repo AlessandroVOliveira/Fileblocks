@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE notes SYSTEM "notes.dtd">
+<notes version="2.0">
+  <owner>Jane Doe</owner>
+  <note id="n1" priority="urgent">
+    <title>Groceries</title>
+    <body>Buy <em>milk</em> and see <link>the list</link></body>
+    <tag name="home"/>
+    <tag name="two words"/>
+  </note>
+  <note archived="maybe">
+    <body>Missing title</body>
+  </note>
+  <memo>Not declared</memo>
+</notes>

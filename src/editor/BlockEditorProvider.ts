@@ -85,7 +85,7 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     let schema: EditorSchema | undefined;
     const refreshSchema = (force = false) => {
       const reference = adapter && SCHEMA_FORMATS.has(adapter.id) ? this.schemas.locate(document, adapter.id) : undefined;
-      if (!force && reference?.uri === schema?.reference.uri) {
+      if (!force && reference?.key === schema?.reference.key) {
         return;
       }
       const current: EditorSchema | undefined = reference && { reference };
@@ -282,7 +282,7 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
           title: 'Select Schema',
           canSelectMany: false,
           defaultUri: vscode.Uri.joinPath(document.uri, '..'),
-          filters: { Schemas: ['json', 'xsd', 'yaml', 'yml'], 'All files': ['*'] },
+          filters: { Schemas: ['json', 'xsd', 'dtd', 'yaml', 'yml'], 'All files': ['*'] },
         })) ?? [];
       if (file) {
         await this.schemas.setOverride(document.uri, file.toString());
@@ -320,7 +320,7 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     const root = adapter.parse(text).root;
     const parent = findBlock(root, parentPath);
     if (parent?.kind === 'element' && !parent.readOnly) {
-      return this.promptInsertMarkup(document, adapter, parent, schema?.kind === 'xsd' ? xsdSuggestions(root, schema.model, parentPath) : undefined);
+      return this.promptInsertMarkup(document, adapter, parent, schema && schema.kind !== 'json' ? xsdSuggestions(root, schema.model, parentPath) : undefined);
     }
     if ((parent?.kind !== 'object' && parent?.kind !== 'array') || parent.readOnly) {
       return;

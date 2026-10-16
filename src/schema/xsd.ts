@@ -28,18 +28,19 @@ export interface XsdSimpleType {
   patterns?: string[];
 }
 
-interface XsdAttribute {
+export interface XsdAttribute {
   name: string;
   required: boolean;
   type: XsdSimpleType;
   documentation?: string;
 }
 
-interface XsdChild {
+export interface XsdChild {
   name: string;
   /** Maximum occurrences (Infinity for unbounded). */
   max: number;
-  declaration: DomElement;
+  /** Opaque handle the schema model resolves with typeOf/documentation (an XSD node, a DTD element name). */
+  declaration: unknown;
 }
 
 export interface XsdType {
@@ -54,7 +55,7 @@ export interface XsdType {
   text: 'none' | 'mixed' | 'any' | XsdSimpleType;
 }
 
-const ANY_TYPE: XsdType = {
+export const ANY_TYPE: XsdType = {
   attributes: new Map(),
   anyAttribute: true,
   children: new Map(),
@@ -78,7 +79,18 @@ export function xsdDependencies(document: DomDocument): string[] {
     : [];
 }
 
-export class XsdModel {
+/**
+ * What validation, hints and suggestions need from a schema for XML: XSD and DTD both provide it.
+ * Declarations are opaque handles owned by the implementation.
+ */
+export interface ElementSchema {
+  /** Declaration of an element that may appear at the top level, if declared. */
+  globalElement(name: string): unknown;
+  typeOf(declaration: unknown): XsdType;
+  documentation(declaration: unknown): string | undefined;
+}
+
+export class XsdModel implements ElementSchema {
   private readonly globals = {
     element: new Map<string, DomElement>(),
     complexType: new Map<string, DomElement>(),
@@ -334,15 +346,15 @@ export class XsdModel {
 interface Visit {
   block: Block;
   type: XsdType;
-  declaration: DomElement;
+  declaration: unknown;
   /** Type of the parent element (undefined at the root). */
   parentType?: XsdType;
 }
 
 /** Element blocks in document order, each with its resolved type. Undeclared elements are reported and skipped. */
-function walk(root: Block | null, model: XsdModel, problems?: SchemaProblem[]): Visit[] {
+function walk(root: Block | null, model: ElementSchema, problems?: SchemaProblem[]): Visit[] {
   const visits: Visit[] = [];
-  const visitElement = (block: Block, declaration: DomElement, parentType?: XsdType) => {
+  const visitElement = (block: Block, declaration: unknown, parentType?: XsdType) => {
     const type = model.typeOf(declaration);
     visits.push({ block, type, declaration, parentType });
     for (const child of block.children ?? []) {
@@ -369,7 +381,8 @@ function walk(root: Block | null, model: XsdModel, problems?: SchemaProblem[]): 
   return visits;
 }
 
-export function validateXml(root: Block | null, model: XsdModel): SchemaProblem[] {
+/** Validates an XML block tree against an XSD or DTD model. */
+export function validateXml(root: Block | null, model: ElementSchema): SchemaProblem[] {
   const problems: SchemaProblem[] = [];
   for (const { block, type } of walk(root, model, problems)) {
     const children = block.children ?? [];
@@ -444,7 +457,7 @@ export function validateXml(root: Block | null, model: XsdModel): SchemaProblem[
   return problems;
 }
 
-export function xsdHints(root: Block | null, model: XsdModel): Record<string, SchemaHint> {
+export function xsdHints(root: Block | null, model: ElementSchema): Record<string, SchemaHint> {
   const hints: Record<string, SchemaHint> = {};
   const add = (id: string, hint: SchemaHint) => {
     if (hint.description || hint.enum || hint.required) {
@@ -475,7 +488,7 @@ export function xsdHints(root: Block | null, model: XsdModel): Record<string, Sc
 }
 
 /** Attributes and child elements the schema allows at an element, for the "+" prompt. */
-export function xsdSuggestions(root: Block | null, model: XsdModel, path: BlockPath): { attributes: PropertySuggestion[]; elements: PropertySuggestion[] } {
+export function xsdSuggestions(root: Block | null, model: ElementSchema, path: BlockPath): { attributes: PropertySuggestion[]; elements: PropertySuggestion[] } {
   const visit = walk(root, model).find((v) => JSON.stringify(v.block.path) === JSON.stringify(path));
   const block = findBlock(root, path);
   if (!visit || !block) {
@@ -577,7 +590,7 @@ const INTEGER_TYPES = new Set([
 ]);
 const NON_NEGATIVE = new Set(['nonNegativeInteger', 'unsignedLong', 'unsignedInt', 'unsignedShort', 'unsignedByte']);
 
-function emptyType(text: XsdType['text'] = 'none'): XsdType {
+export function emptyType(text: XsdType['text'] = 'none'): XsdType {
   return { attributes: new Map(), anyAttribute: false, children: new Map(), anyElement: false, requiredGroups: [], text };
 }
 

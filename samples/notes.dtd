@@ -1,0 +1,24 @@
+<!-- Sample DTD for notes.xml -->
+<!ENTITY % priority "(low|normal|high)">
+
+<!-- A collection of notes. -->
+<!ELEMENT notes (owner, note+)>
+<!ATTLIST notes version CDATA #FIXED "1.0">
+
+<!-- Who the notes belong to. -->
+<!ELEMENT owner (#PCDATA)>
+
+<!-- One note: a title, a body and optional tags. -->
+<!ELEMENT note (title, body, tag*)>
+<!ATTLIST note
+  id       ID            #REQUIRED
+  priority %priority;    "normal"
+  archived (yes|no)      #IMPLIED>
+
+<!ELEMENT title (#PCDATA)>
+<!ELEMENT body (#PCDATA | em | link)*>
+<!ELEMENT em (#PCDATA)>
+<!ELEMENT link (#PCDATA)>
+<!ATTLIST link href CDATA #REQUIRED>
+<!ELEMENT tag EMPTY>
+<!ATTLIST tag name NMTOKEN #REQUIRED>

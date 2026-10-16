@@ -47,7 +47,8 @@ src/
     association.ts             qual schema se aplica ($schema, modeline YAML, #:schema, xsi:*, settings)
     navigator.ts               percorre o schema por caminho: dicas, enum, obrigatórios, sugestões, defaults
     validate.ts                validação com ajv e mapeamento dos erros para caminhos de blocos
-    xsd.ts                     subconjunto de XSD: validação, dicas e sugestões para XML
+    xsd.ts                     subconjunto de XSD + validação/dicas/sugestões de XML (compartilhadas com o DTD)
+    dtd.ts                     DTD: <!ELEMENT>, <!ATTLIST>, entidades de parâmetro -> mesmo modelo do XSD
     SchemaService.ts           carrega (arquivo/https), compila e faz cache dos schemas; escolha manual
 webview/                       React + React Flow
   main.tsx                     ponto de entrada
@@ -134,6 +135,13 @@ elementos e atributos permitidos e obrigatórios, quantidade máxima, `enumerati
 carregados. Não verifica a ordem dentro de `sequence`, namespaces nem restrições de identidade.
 Documentação do XSD aparece nos tooltips e o **+** sugere atributos e filhos válidos. Veja `samples/catalog.xml`.
 
+**DTD** (XML): vem do `<!DOCTYPE raiz SYSTEM "x.dtd">` (ou `PUBLIC "…" "x.dtd"`), do subconjunto interno
+`<!DOCTYPE raiz [ … ]>` (os dois juntos também), de `xml.fileAssociations` ou do **Select Schema…** com um
+`.dtd`. Entende `EMPTY`, `ANY`, `(#PCDATA)`, conteúdo misto e modelos com `,` `|` `?` `*` `+`; atributos
+`#REQUIRED` / `#IMPLIED` / `#FIXED` e listas de valores; e entidades de parâmetro (`%nome;`). Usa a mesma
+validação, dicas e sugestões do XSD; o comentário logo antes de um `<!ELEMENT>` vira a documentação do
+elemento. Se o XML tiver XSD e DTD, o XSD tem prioridade. Veja `samples/notes.xml`.
+
 **Arquivos grandes:** na primeira abertura, se o grafo passar de 150 cards, só os primeiros níveis
 ficam expandidos (a toolbar avisa); a busca e o cursor do texto expandem o que for preciso. Acima de
 100 cards, o canvas só renderiza os cards visíveis, e cards com mais de 100 linhas só renderizam as
@@ -161,6 +169,6 @@ linhas visíveis. Exportar como PNG um grafo muito grande pode demorar e sai com
 - [x] XSD para XML (subconjunto)
 - [x] Expandir/recolher tudo, exportar PNG/SVG, escolher schema manualmente
 - [x] TOML
-- [ ] DTD para XML
+- [x] DTD para XML
 - [x] Testes unitários dos adapters
 - [x] Empacotar como .vsix
