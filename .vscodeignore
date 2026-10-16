@@ -9,3 +9,5 @@ tsconfig.json
 **/*.ts
 test/**
 out/**
+.gitignore
+.gitattributes

@@ -11,7 +11,11 @@ npm run build      # gera dist/extension.js, dist/webview.js e dist/webview.css
 npm run watch      # rebuild automático
 npm run typecheck  # checagem de tipos (o esbuild não checa tipos)
 npm test           # testes unitários dos adapters (node:test)
+npm run package    # build de produção + fileblocks-<versão>.vsix
 ```
+
+Para instalar no VS Code do dia a dia (sem F5): `code --install-extension fileblocks-0.0.1.vsix`,
+ou **Extensions → ⋯ → Install from VSIX…**. Para atualizar, gere o `.vsix` de novo e reinstale.
 
 Para rodar, aperte **F5** no VS Code. Ele abre uma janela de Extension Development Host com a pasta `samples/`.
 Abra um arquivo e use o ícone na barra de título, ou clique com o botão direito no explorer e escolha
@@ -121,3 +125,4 @@ linhas visíveis.
 - [x] Sincronizar a seleção entre o bloco e o texto
 - [ ] Edição guiada por schema (JSON Schema / XSD)
 - [x] Testes unitários dos adapters
+- [x] Empacotar como .vsix
