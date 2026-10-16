@@ -20,13 +20,27 @@
         "displayName": "Fileblocks",
         "priority": "option",
         "selector": [
-          { "filenamePattern": "*.json" },
-          { "filenamePattern": "*.jsonc" },
-          { "filenamePattern": "*.yaml" },
-          { "filenamePattern": "*.yml" },
-          { "filenamePattern": "*.xml" },
-          { "filenamePattern": "*.html" },
-          { "filenamePattern": "*.htm" }
+          {
+            "filenamePattern": "*.json"
+          },
+          {
+            "filenamePattern": "*.jsonc"
+          },
+          {
+            "filenamePattern": "*.yaml"
+          },
+          {
+            "filenamePattern": "*.yml"
+          },
+          {
+            "filenamePattern": "*.xml"
+          },
+          {
+            "filenamePattern": "*.html"
+          },
+          {
+            "filenamePattern": "*.htm"
+          }
         ]
       }
     ],
@@ -60,7 +74,8 @@
     "watch": "node esbuild.mjs --watch",
     "typecheck": "tsc --noEmit",
     "vscode:prepublish": "node esbuild.mjs --production",
-    "package": "npx @vscode/vsce package"
+    "package": "npx @vscode/vsce package",
+    "test": "esbuild \"test/*.test.ts\" --bundle --platform=node --main-fields=module,main --outdir=out/test --log-level=warning && node --test \"out/test/*.test.js\""
   },
   "dependencies": {
     "jsonc-parser": "^3.3.1",

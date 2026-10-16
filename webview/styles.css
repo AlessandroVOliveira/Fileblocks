@@ -117,3 +117,65 @@ body {
   font-style: italic;
   color: var(--vscode-descriptionForeground);
 }
+
+.block-handle {
+  padding: 0 2px;
+  border: none;
+  color: var(--vscode-descriptionForeground);
+  background: none;
+  cursor: grab;
+  opacity: 0.5;
+}
+
+.block-handle:hover,
+.block-handle:focus-visible {
+  opacity: 1;
+}
+
+.block-actions {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+  visibility: hidden;
+}
+
+.block-header:hover > .block-actions,
+.block-header:focus-within > .block-actions {
+  visibility: visible;
+}
+
+.block-action {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 3px;
+  color: var(--vscode-icon-foreground);
+  background: none;
+  cursor: pointer;
+}
+
+.block-action:hover {
+  background: var(--vscode-toolbar-hoverBackground);
+}
+
+.block-key[title] {
+  cursor: text;
+}
+
+.block.dragging {
+  opacity: 0.4;
+}
+
+.block.drop-before {
+  box-shadow: 0 -2px 0 0 var(--vscode-focusBorder);
+}
+
+.block.drop-after {
+  box-shadow: 0 2px 0 0 var(--vscode-focusBorder);
+}
+
+button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
+}

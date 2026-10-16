@@ -27,3 +27,11 @@ export interface Block {
 export function pathToId(path: BlockPath): string {
   return JSON.stringify(path);
 }
+
+export function findBlock(root: Block | null, path: BlockPath): Block | undefined {
+  let current: Block | undefined = root ?? undefined;
+  for (const segment of path) {
+    current = current?.children?.find((child) => child.label === segment);
+  }
+  return current;
+}

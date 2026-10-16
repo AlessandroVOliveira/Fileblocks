@@ -1,7 +1,21 @@
 import * as vscode from 'vscode';
-import type { BlockEdit, HostToWebview, WebviewToHost } from '../model/messages';
+import { findBlock, type BlockPath } from '../model/block';
+import type { BlockEdit, HostToWebview, InsertValue, WebviewToHost } from '../model/messages';
 import { getAdapter, type FormatAdapter } from '../parsers';
 import { getWebviewHtml } from './webviewHtml';
+
+interface ValueTypeItem extends vscode.QuickPickItem {
+  value: () => InsertValue;
+}
+
+const VALUE_TYPES: ValueTypeItem[] = [
+  { label: 'String', value: () => '' },
+  { label: 'Number', value: () => 0 },
+  { label: 'Boolean', value: () => false },
+  { label: 'Null', value: () => null },
+  { label: 'Object', value: () => ({}) },
+  { label: 'Array', value: () => [] },
+];
 
 /**
  * Custom text editor: the TextDocument stays the source of truth (so undo/redo, save
@@ -54,6 +68,16 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
               void this.applyEdit(document, adapter, message.edit);
             }
             break;
+          case 'add':
+            if (adapter) {
+              void this.promptInsert(document, adapter, message.parentPath);
+            }
+            break;
+          case 'rename':
+            if (adapter) {
+              void this.promptRename(document, adapter, message.path);
+            }
+            break;
           case 'openText':
             void vscode.commands.executeCommand('vscode.openWith', document.uri, 'default', vscode.ViewColumn.Beside);
             break;
@@ -64,10 +88,56 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     panel.onDidDispose(() => subscriptions.forEach((d) => d.dispose()));
   }
 
+  private async promptInsert(document: vscode.TextDocument, adapter: FormatAdapter, parentPath: BlockPath): Promise<void> {
+    const parent = findBlock(adapter.parse(document.getText()).root, parentPath);
+    if (parent?.kind !== 'object' && parent?.kind !== 'array') {
+      return;
+    }
+
+    let key: string | undefined;
+    if (parent.kind === 'object') {
+      const existing = siblingKeys(parent.children);
+      key = await vscode.window.showInputBox({
+        title: 'Fileblocks: Add entry',
+        prompt: 'Key for the new entry',
+        validateInput: (value) => validateKey(value, existing),
+      });
+      if (key === undefined) {
+        return;
+      }
+    }
+
+    const type = await vscode.window.showQuickPick(VALUE_TYPES, { title: 'Fileblocks: Add entry', placeHolder: 'Type of the new value' });
+    if (!type) {
+      return;
+    }
+    await this.applyEdit(document, adapter, { type: 'insert', parentPath, key, value: type.value() });
+  }
+
+  private async promptRename(document: vscode.TextDocument, adapter: FormatAdapter, path: BlockPath): Promise<void> {
+    const root = adapter.parse(document.getText()).root;
+    const parent = findBlock(root, path.slice(0, -1));
+    const currentKey = path[path.length - 1];
+    if (parent?.kind !== 'object' || typeof currentKey !== 'string') {
+      return;
+    }
+
+    const existing = siblingKeys(parent.children).filter((key) => key !== currentKey);
+    const newKey = await vscode.window.showInputBox({
+      title: 'Fileblocks: Rename key',
+      value: currentKey,
+      validateInput: (value) => validateKey(value, existing),
+    });
+    if (newKey === undefined || newKey === currentKey) {
+      return;
+    }
+    await this.applyEdit(document, adapter, { type: 'rename', path, newKey });
+  }
+
   private async applyEdit(document: vscode.TextDocument, adapter: FormatAdapter, edit: BlockEdit): Promise<void> {
     const changes = adapter.applyEdit(document.getText(), edit);
     if (!changes) {
-      void vscode.window.showWarningMessage(`Fileblocks: this edit is not supported for ${adapter.id} yet.`);
+      void vscode.window.showWarningMessage(`Fileblocks: could not apply "${edit.type}" to this ${adapter.id} file.`);
       return;
     }
     const workspaceEdit = new vscode.WorkspaceEdit();
@@ -80,4 +150,15 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     }
     await vscode.workspace.applyEdit(workspaceEdit);
   }
+}
+
+function siblingKeys(children: { label?: string | number }[] = []): string[] {
+  return children.map((child) => String(child.label));
+}
+
+function validateKey(value: string, existing: string[]): string | undefined {
+  if (value === '') {
+    return 'Key cannot be empty';
+  }
+  return existing.includes(value) ? `"${value}" already exists` : undefined;
 }

@@ -7,3 +7,5 @@ esbuild.mjs
 tsconfig.json
 **/*.map
 **/*.ts
+test/**
+out/**

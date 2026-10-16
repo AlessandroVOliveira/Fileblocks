@@ -7,7 +7,17 @@ export interface ParseError {
   offset?: number;
 }
 
-export type BlockEdit = { type: 'setValue'; path: BlockPath; value: ScalarValue };
+/** Value for a newly inserted block: a scalar, or an empty object/array. */
+export type InsertValue = ScalarValue | Record<string, never> | never[];
+
+export type BlockEdit =
+  | { type: 'setValue'; path: BlockPath; value: ScalarValue }
+  | { type: 'remove'; path: BlockPath }
+  | { type: 'rename'; path: BlockPath; newKey: string }
+  /** Appends to the parent; `key` is required when the parent is an object. */
+  | { type: 'insert'; parentPath: BlockPath; key?: string; value: InsertValue }
+  /** Reorders a block within its parent; `toIndex` is its final position. */
+  | { type: 'move'; path: BlockPath; toIndex: number };
 
 export type HostToWebview = {
   type: 'update';
@@ -19,4 +29,8 @@ export type HostToWebview = {
 export type WebviewToHost =
   | { type: 'ready' }
   | { type: 'edit'; edit: BlockEdit }
+  /** Asks the host to prompt for the new block's key/type, then insert it. */
+  | { type: 'add'; parentPath: BlockPath }
+  /** Asks the host to prompt for a new key, then rename the block. */
+  | { type: 'rename'; path: BlockPath }
   | { type: 'openText' };

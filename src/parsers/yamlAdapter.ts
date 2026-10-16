@@ -1,5 +1,20 @@
-import { isAlias, isMap, isNode, isScalar, isSeq, parseDocument } from 'yaml';
+import {
+  isAlias,
+  isCollection,
+  isMap,
+  isNode,
+  isPair,
+  isScalar,
+  isSeq,
+  parseDocument,
+  type Document,
+  type Pair,
+  type YAMLMap,
+  type YAMLSeq,
+} from 'yaml';
 import { pathToId, type Block, type BlockPath, type ScalarValue } from '../model/block';
+import type { BlockEdit } from '../model/messages';
+import { diffText } from './textDiff';
 import type { FormatAdapter } from './types';
 
 export const yamlAdapter: FormatAdapter = {
@@ -16,22 +31,139 @@ export const yamlAdapter: FormatAdapter = {
 
   applyEdit(text, edit) {
     const doc = parseDocument(text);
-    if (doc.errors.length > 0) {
+    if (doc.errors.length > 0 || !applyYamlEdit(doc, edit)) {
       return undefined;
     }
-    if (edit.type === 'setValue') {
-      // Mutate the existing scalar so its comments and quoting style survive.
-      const node = doc.getIn(edit.path, true);
-      if (isScalar(node)) {
-        node.value = edit.value;
-      } else {
-        doc.setIn(edit.path, edit.value);
-      }
-      return [{ offset: 0, length: text.length, content: doc.toString() }];
-    }
-    return undefined;
+    return diffText(text, doc.toString());
   },
 };
+
+/** Mutates the document in place, reusing existing nodes so comments, anchors and quoting survive. */
+function applyYamlEdit(doc: Document, edit: BlockEdit): boolean {
+  switch (edit.type) {
+    case 'setValue': {
+      if (edit.path.length === 0) {
+        if (!isScalar(doc.contents)) {
+          return false;
+        }
+        doc.contents.value = edit.value;
+        return true;
+      }
+      const slot = locate(doc, edit.path);
+      if (!slot) {
+        return false;
+      }
+      const current = slotValue(slot);
+      if (isScalar(current)) {
+        current.value = edit.value;
+      } else {
+        setSlotValue(slot, doc.createNode(edit.value));
+      }
+      return true;
+    }
+
+    case 'remove': {
+      const slot = locate(doc, edit.path);
+      if (!slot) {
+        return false;
+      }
+      slot.parent.items.splice(slot.index, 1);
+      return true;
+    }
+
+    case 'rename': {
+      const slot = locate(doc, edit.path);
+      if (!slot || !isMap(slot.parent) || mapKeys(slot.parent).includes(edit.newKey)) {
+        return false;
+      }
+      const pair = slot.parent.items[slot.index];
+      if (isScalar(pair.key)) {
+        pair.key.value = edit.newKey;
+      } else {
+        pair.key = doc.createNode(edit.newKey);
+      }
+      return true;
+    }
+
+    case 'insert': {
+      const parent = edit.parentPath.length === 0 ? doc.contents : slotValueAt(doc, edit.parentPath);
+      if (isCollection(parent) && parent.items.length === 0) {
+        // An empty collection is written as `{}`/`[]` and parses back as flow style;
+        // switch to block style so the first child goes on its own line.
+        parent.flow = false;
+      }
+      if (isSeq(parent)) {
+        parent.items.push(doc.createNode(edit.value));
+        return true;
+      }
+      if (isMap(parent) && edit.key !== undefined && !mapKeys(parent).includes(edit.key)) {
+        parent.items.push(doc.createPair(edit.key, doc.createNode(edit.value)));
+        return true;
+      }
+      return false;
+    }
+
+    case 'move': {
+      const slot = locate(doc, edit.path);
+      const items: unknown[] | undefined = slot?.parent.items;
+      if (!slot || !items || edit.toIndex < 0 || edit.toIndex >= items.length) {
+        return false;
+      }
+      const [item] = items.splice(slot.index, 1);
+      items.splice(edit.toIndex, 0, item);
+      return true;
+    }
+  }
+}
+
+/** Position of a path's last segment inside its parent collection. */
+interface Slot {
+  parent: YAMLMap<unknown, unknown> | YAMLSeq<unknown>;
+  index: number;
+}
+
+function locate(doc: Document, path: BlockPath): Slot | undefined {
+  if (path.length === 0) {
+    return undefined;
+  }
+  const parent = path.length === 1 ? doc.contents : slotValueAt(doc, path.slice(0, -1));
+  const segment = path[path.length - 1];
+  if (isMap(parent)) {
+    const index = parent.items.findIndex((pair) => keyToString(pair.key) === String(segment));
+    return index >= 0 ? { parent, index } : undefined;
+  }
+  if (isSeq(parent) && typeof segment === 'number' && segment >= 0 && segment < parent.items.length) {
+    return { parent, index: segment };
+  }
+  return undefined;
+}
+
+function slotValueAt(doc: Document, path: BlockPath): unknown {
+  const slot = locate(doc, path);
+  return slot ? slotValue(slot) : undefined;
+}
+
+function slotValue(slot: Slot): unknown {
+  const item = slot.parent.items[slot.index];
+  return isPair(item) ? item.value : item;
+}
+
+function setSlotValue(slot: Slot, value: unknown): void {
+  const item = slot.parent.items[slot.index];
+  if (isPair(item)) {
+    (item as Pair<unknown, unknown>).value = value;
+  } else {
+    slot.parent.items[slot.index] = value;
+  }
+}
+
+function mapKeys(map: YAMLMap<unknown, unknown>): string[] {
+  return map.items.map((pair) => keyToString(pair.key));
+}
+
+function keyToString(key: unknown): string {
+  return isScalar(key) ? String(key.value) : String(key);
+}
 
 function toBlock(node: unknown, path: BlockPath, label: string | number | undefined): Block {
   const base = {
@@ -49,7 +181,7 @@ function toBlock(node: unknown, path: BlockPath, label: string | number | undefi
       ...base,
       kind: 'object',
       children: node.items.map((pair) => {
-        const key = isScalar(pair.key) ? String(pair.key.value) : String(pair.key);
+        const key = keyToString(pair.key);
         return toBlock(pair.value, [...path, key], key);
       }),
     };
