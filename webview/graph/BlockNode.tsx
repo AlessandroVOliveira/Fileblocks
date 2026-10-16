@@ -1,7 +1,7 @@
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 import { useEffect, useState, type DragEvent, type KeyboardEvent } from 'react';
 import type { Block, ScalarValue } from '../../src/model/block';
-import { useActions, type EditorActions } from '../actions';
+import { useActions, useSearchHighlight, type EditorActions, type SearchHighlight } from '../actions';
 import { displayValue, HEADER_HEIGHT, nodeId, nodeTitle, ROW_HEIGHT, summary } from './buildGraph';
 import type { BlockFlowNode } from './layout';
 
@@ -11,6 +11,7 @@ const INTERACTIVE = 'nodrag nopan';
 export function BlockNode({ data }: NodeProps<BlockFlowNode>) {
   const { block, parent, width, height } = data;
   const actions = useActions();
+  const search = useSearchHighlight();
   const isContainer = block.children !== undefined;
   const rows = block.children ?? [];
 
@@ -18,7 +19,10 @@ export function BlockNode({ data }: NodeProps<BlockFlowNode>) {
     <div className={`gnode gnode--${block.kind}`} style={{ width, height }}>
       {parent && <Handle type="target" position={Position.Left} isConnectable={false} style={{ top: HEADER_HEIGHT / 2 }} />}
 
-      <div className="gnode-header" style={{ height: HEADER_HEIGHT }}>
+      <div
+        className={`gnode-header${isContainer && search.matchIds.has(block.id) ? ' gnode-header--match' : ''}`}
+        style={{ height: HEADER_HEIGHT }}
+      >
         <span className="gnode-title" title={nodeTitle(block)}>{nodeTitle(block)}</span>
         {isContainer && <span className="gnode-summary">{summary(block)}</span>}
         <span className={`gnode-actions ${INTERACTIVE}`}>
@@ -35,7 +39,7 @@ export function BlockNode({ data }: NodeProps<BlockFlowNode>) {
       </div>
 
       {!isContainer && (
-        <div className={`gnode-row ${INTERACTIVE}`} style={{ height: ROW_HEIGHT }}>
+        <div className={`gnode-row ${INTERACTIVE}${matchClass(search, block)}`} style={{ height: ROW_HEIGHT }}>
           <ScalarInput block={block} />
         </div>
       )}
@@ -62,6 +66,7 @@ let dragSource: DragSource | undefined;
 
 function Row({ child, node, index }: { child: Block; node: Block; index: number }) {
   const actions = useActions();
+  const search = useSearchHighlight();
   const isContainer = child.children !== undefined;
   const collapsed = isContainer && actions.isCollapsed(child.id);
   const canRename = node.kind === 'object';
@@ -99,7 +104,7 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
 
   return (
     <div
-      className={`gnode-row ${INTERACTIVE}`}
+      className={`gnode-row ${INTERACTIVE}${matchClass(search, child)}`}
       style={{ height: ROW_HEIGHT }}
       onKeyDown={onKeyDown}
       onDragOver={onDragOver}
@@ -151,6 +156,13 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
       )}
     </div>
   );
+}
+
+function matchClass(search: SearchHighlight, block: Block): string {
+  if (search.activeId === block.id) {
+    return ' row--match row--active';
+  }
+  return search.matchIds.has(block.id) ? ' row--match' : '';
 }
 
 function ScalarInput({ block }: { block: Block }) {

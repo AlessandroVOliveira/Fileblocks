@@ -293,3 +293,66 @@ button:focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: -1px;
 }
+
+/* ---------- search ---------- */
+
+.search {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: min(360px, 50%);
+  padding: 0 2px 0 0;
+  border: 1px solid var(--vscode-input-border, var(--vscode-panel-border));
+  border-radius: 2px;
+  background: var(--vscode-input-background);
+}
+
+.search:focus-within {
+  border-color: var(--vscode-focusBorder);
+}
+
+.search--empty .search-count {
+  color: var(--vscode-errorForeground);
+}
+
+.search-input {
+  flex: 1;
+  min-width: 0;
+  padding: 3px 6px;
+  border: none;
+  outline: none;
+  color: var(--vscode-input-foreground);
+  background: transparent;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.search-input::placeholder {
+  color: var(--vscode-input-placeholderForeground);
+}
+
+.search-count {
+  padding: 0 4px;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground);
+}
+
+.action:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.gnode-row.row--match,
+.gnode-header--match {
+  background: var(--vscode-editor-findMatchHighlightBackground, rgba(234, 92, 0, 0.33));
+}
+
+.gnode-row.row--active {
+  background: var(--vscode-editor-findMatchBackground, rgba(81, 92, 106, 0.8));
+  box-shadow: inset 2px 0 0 0 var(--vscode-editor-findMatchBorder, var(--vscode-focusBorder));
+}
+
+.react-flow__minimap-node.minimap-match {
+  fill: var(--vscode-editorOverviewRuler-findMatchForeground, #d18616);
+}

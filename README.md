@@ -45,6 +45,8 @@ webview/                       React + React Flow
     buildGraph.ts              Block -> nós e arestas (função pura, testada)
     layout.ts                  layout automático da esquerda para a direita (dagre)
     BlockNode.tsx              card de um objeto/array: linhas editáveis, ações, drag & drop
+    search.ts                  busca em chaves e valores (função pura, testada)
+  SearchBox.tsx                campo de busca da toolbar
   styles.css                   tema do VS Code aplicado ao canvas e aos nós
 test/                          testes dos adapters e do grafo
 samples/                       arquivos para testar
@@ -67,6 +69,7 @@ Os adapters não dependem da API do `vscode`, então são testados com testes un
 | Ação | Como |
 |---|---|
 | Navegar | Arraste o fundo para mover, roda do mouse para zoom, minimapa e botões no canto |
+| Buscar | **Ctrl+F** ou o campo na toolbar: procura em chaves e valores; Enter / Shift+Enter (ou ↑/↓) navegam e centralizam o resultado, expandindo nós recolhidos; Esc limpa |
 | Editar valor | Clique no valor e dê Enter (Esc cancela; checkbox para booleanos) |
 | Recolher/expandir | Clique no resumo `{n}` / `[n]` da linha |
 | Adicionar | Botão **+** no cabeçalho do card (o VS Code pergunta a chave e o tipo) |
@@ -82,7 +85,7 @@ Tudo passa pelo documento, então **Ctrl+Z** desfaz qualquer ação.
 - [x] JSON e YAML: visualizar e editar valores escalares
 - [x] Adicionar, remover, renomear e reordenar blocos (drag & drop, Alt+↑/↓)
 - [x] Visualização em grafo (React Flow + dagre) com pan, zoom e minimapa
-- [ ] Busca no grafo (destacar e centralizar nós)
+- [x] Busca no grafo (destacar, navegar e centralizar resultados)
 - [ ] Clicar num nó revela o trecho no editor de texto
 - [ ] Performance com arquivos grandes (virtualização / recolher níveis profundos por padrão)
 - [ ] XML e HTML com parser que guarda posições
