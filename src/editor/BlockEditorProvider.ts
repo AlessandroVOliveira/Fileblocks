@@ -142,6 +142,9 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
 
   private async promptInsert(document: vscode.TextDocument, adapter: FormatAdapter, parentPath: BlockPath): Promise<void> {
     const parent = findBlock(adapter.parse(document.getText()).root, parentPath);
+    if (parent?.kind === 'element' && !parent.readOnly) {
+      return this.promptInsertMarkup(document, adapter, parent);
+    }
     if ((parent?.kind !== 'object' && parent?.kind !== 'array') || parent.readOnly) {
       return;
     }
@@ -166,9 +169,48 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     await this.applyEdit(document, adapter, { type: 'insert', parentPath, key, value: type.value() });
   }
 
+  /** XML/HTML: an element can get a child element, an attribute or text. */
+  private async promptInsertMarkup(document: vscode.TextDocument, adapter: FormatAdapter, parent: Block): Promise<void> {
+    const title = `Fileblocks: Add to <${parent.caption}>`;
+    const choice = await vscode.window.showQuickPick(
+      [
+        { label: 'Child element', what: 'element' as const },
+        { label: 'Attribute', what: 'attribute' as const },
+        { label: 'Text', what: 'text' as const },
+      ],
+      { title, placeHolder: 'What to add' },
+    );
+    if (!choice) {
+      return;
+    }
+
+    if (choice.what === 'text') {
+      const text = await vscode.window.showInputBox({ title, prompt: 'Text content' });
+      if (text) {
+        await this.applyEdit(document, adapter, { type: 'insert', parentPath: parent.path, key: '#text', value: text });
+      }
+      return;
+    }
+
+    const existing = choice.what === 'attribute' ? attributeNames(parent) : [];
+    const name = await vscode.window.showInputBox({
+      title,
+      prompt: choice.what === 'attribute' ? 'Attribute name' : 'Tag name',
+      validateInput: (value) => validateMarkupName(value, choice.what, existing),
+    });
+    if (name === undefined) {
+      return;
+    }
+    const edit: BlockEdit =
+      choice.what === 'attribute'
+        ? { type: 'insert', parentPath: parent.path, key: `@${name}`, value: '' }
+        : { type: 'insert', parentPath: parent.path, key: name, value: {} };
+    await this.applyEdit(document, adapter, edit);
+  }
+
   private async promptChangeType(document: vscode.TextDocument, adapter: FormatAdapter, path: BlockPath): Promise<void> {
     const block = findBlock(adapter.parse(document.getText()).root, path);
-    if (!block || block.readOnly) {
+    if (!block || block.readOnly || (block.kind !== 'object' && block.kind !== 'array' && block.kind !== 'scalar')) {
       return;
     }
     const current = typeOf(block);
@@ -195,19 +237,31 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
 
   private async promptRename(document: vscode.TextDocument, adapter: FormatAdapter, path: BlockPath): Promise<void> {
     const root = adapter.parse(document.getText()).root;
-    const parent = findBlock(root, path.slice(0, -1));
-    const currentKey = path[path.length - 1];
-    if (parent?.kind !== 'object' || typeof currentKey !== 'string') {
+    const block = findBlock(root, path);
+    const parent = path.length > 0 ? findBlock(root, path.slice(0, -1)) : undefined;
+    if (!block) {
       return;
     }
 
-    const existing = siblingKeys(parent.children).filter((key) => key !== currentKey);
-    const newKey = await vscode.window.showInputBox({
-      title: 'Fileblocks: Rename key',
-      value: currentKey,
-      validateInput: (value) => validateKey(value, existing),
-    });
-    if (newKey === undefined || newKey === currentKey) {
+    let current: string;
+    let validate: (value: string) => string | undefined;
+    if (block.kind === 'element') {
+      current = block.caption ?? '';
+      validate = (value) => validateMarkupName(value, 'element', []);
+    } else if (block.kind === 'attribute' && parent) {
+      current = String(block.label).slice(1);
+      const existing = attributeNames(parent).filter((name) => name !== current);
+      validate = (value) => validateMarkupName(value, 'attribute', existing);
+    } else if (parent?.kind === 'object' && typeof block.label === 'string') {
+      current = block.label;
+      const existing = siblingKeys(parent.children).filter((key) => key !== current);
+      validate = (value) => validateKey(value, existing);
+    } else {
+      return;
+    }
+
+    const newKey = await vscode.window.showInputBox({ title: 'Fileblocks: Rename', value: current, validateInput: validate });
+    if (newKey === undefined || newKey === current) {
       return;
     }
     await this.applyEdit(document, adapter, { type: 'rename', path, newKey });
@@ -246,6 +300,19 @@ export class BlockEditorProvider implements vscode.CustomTextEditorProvider {
     }
     await vscode.workspace.applyEdit(workspaceEdit);
   }
+}
+
+function attributeNames(element: Block): string[] {
+  return (element.children ?? []).filter((child) => child.kind === 'attribute').map((child) => String(child.label).slice(1));
+}
+
+/** Tag names follow XML naming; attribute names only exclude characters that would break the tag (allows `@click`, `:class`). */
+function validateMarkupName(value: string, what: 'element' | 'attribute', existing: string[]): string | undefined {
+  const valid = what === 'element' ? /^[A-Za-z_][\w.\-:]*$/ : /^[^\s"'>/=]+$/;
+  if (!valid.test(value)) {
+    return what === 'element' ? 'Not a valid tag name' : 'Not a valid attribute name';
+  }
+  return existing.includes(value) ? `"${value}" already exists` : undefined;
 }
 
 function siblingKeys(children: { label?: string | number }[] = []): string[] {

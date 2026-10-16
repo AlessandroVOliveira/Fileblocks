@@ -391,3 +391,18 @@ button:focus-visible {
 .row-handle--fixed {
   visibility: hidden;
 }
+
+/* ---------- XML / HTML ---------- */
+
+.gnode--element {
+  border-top: 3px solid var(--vscode-charts-orange, #d18616);
+}
+
+.row-key--attribute {
+  font-style: italic;
+  color: var(--vscode-symbolIcon-fieldForeground, var(--vscode-descriptionForeground));
+}
+
+.row-key--element {
+  color: var(--vscode-symbolIcon-classForeground, var(--vscode-editor-foreground));
+}

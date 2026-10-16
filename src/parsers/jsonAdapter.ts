@@ -9,6 +9,7 @@ import {
 } from 'jsonc-parser';
 import { pathToId, type Block, type BlockPath } from '../model/block';
 import type { BlockEdit } from '../model/messages';
+import { lineIndentAt, rotateSpans } from './textEdits';
 import type { FormatAdapter, TextChange } from './types';
 
 export const jsonAdapter: FormatAdapter = {
@@ -126,16 +127,7 @@ function appendEntry(text: string, parent: Node, entry: string, formatting: Form
   return [{ offset: parent.offset + 1, length: parent.length - 2, content: `${eol}${indent}${unit}${entry}${eol}${indent}` }];
 }
 
-function lineIndentAt(text: string, offset: number): string {
-  const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
-  return /^[ \t]*/.exec(text.slice(lineStart))![0];
-}
-
-/**
- * Moves by rotating the source text of the siblings between the old and new position.
- * Separators (commas, whitespace, line breaks) stay where they are, so the layout of the
- * container is untouched: an inline array stays inline, a multi-line object stays multi-line.
- */
+/** Moves by rotating sibling source text, so an inline array stays inline and a multi-line object stays multi-line. */
 function moveNode(text: string, tree: Node, path: BlockPath, toIndex: number): TextChange[] | undefined {
   const node = findNodeAtLocation(tree, path);
   const parent = findNodeAtLocation(tree, path.slice(0, -1));
@@ -143,30 +135,8 @@ function moveNode(text: string, tree: Node, path: BlockPath, toIndex: number): T
     return undefined;
   }
   const siblings = parent.children ?? [];
-  const from = siblings.indexOf(entryOf(parent, node));
-  if (from < 0 || toIndex < 0 || toIndex >= siblings.length) {
-    return undefined;
-  }
-  if (from === toIndex) {
-    return [];
-  }
-
-  const order = siblings.map((_, i) => i);
-  order.splice(toIndex, 0, ...order.splice(from, 1));
-  const low = Math.min(from, toIndex);
-  const high = Math.max(from, toIndex);
-  const sourceOf = (n: Node) => text.slice(n.offset, n.offset + n.length);
-
-  let content = '';
-  for (let i = low; i <= high; i++) {
-    content += sourceOf(siblings[order[i]]);
-    if (i < high) {
-      content += text.slice(siblings[i].offset + siblings[i].length, siblings[i + 1].offset);
-    }
-  }
-  const startOffset = siblings[low].offset;
-  const endOffset = siblings[high].offset + siblings[high].length;
-  return [{ offset: startOffset, length: endOffset - startOffset, content }];
+  const spans = siblings.map((n) => ({ start: n.offset, end: endOf(n) }));
+  return rotateSpans(text, spans, siblings.indexOf(entryOf(parent, node)), toIndex);
 }
 
 function findPropertyKey(tree: Node, path: BlockPath): Node | undefined {

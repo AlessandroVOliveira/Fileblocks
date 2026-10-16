@@ -73,7 +73,7 @@ export function nodeId(block: Block): string {
 
 export function nodeTitle(block: Block): string {
   if (block.caption !== undefined) {
-    return block.caption;
+    return captionText(block);
   }
   if (block.label === undefined) {
     return 'root';
@@ -83,7 +83,20 @@ export function nodeTitle(block: Block): string {
 
 /** Text shown for a block as a row of its parent card. */
 export function rowLabel(block: Block): string {
-  return block.caption ?? String(block.label ?? '');
+  return block.caption !== undefined ? captionText(block) : String(block.label ?? '');
+}
+
+/** Elements show their tag name as `<tag>`. */
+function captionText(block: Block): string {
+  return block.kind === 'element' ? `<${block.caption}>` : block.caption!;
+}
+
+/** The name the user searches and renames: object keys, attribute names (with @) and tag names. */
+export function blockName(block: Block): string | undefined {
+  if (block.kind === 'element') {
+    return block.caption;
+  }
+  return typeof block.label === 'string' ? block.label : undefined;
 }
 
 export function summary(block: Block): string {

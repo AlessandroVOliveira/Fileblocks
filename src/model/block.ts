@@ -5,7 +5,7 @@
 
 export type BlockPath = (string | number)[];
 export type ScalarValue = string | number | boolean | null;
-export type BlockKind = 'object' | 'array' | 'scalar' | 'element' | 'text';
+export type BlockKind = 'object' | 'array' | 'scalar' | 'element' | 'attribute' | 'text';
 
 export interface Block {
   /** Stable id derived from the path, used to keep UI state (e.g. collapsed) across re-renders. */

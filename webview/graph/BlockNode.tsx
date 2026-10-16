@@ -31,12 +31,12 @@ export function BlockNode({ data }: NodeProps<BlockFlowNode>) {
           {isContainer && !block.readOnly && (
             <ActionButton
               text="+"
-              title={block.kind === 'array' ? 'Add item' : 'Add entry'}
+              title={block.kind === 'array' ? 'Add item' : block.kind === 'element' ? 'Add child, attribute or text' : 'Add entry'}
               onClick={() => actions.post({ type: 'add', parentPath: block.path })}
             />
           )}
-          {!block.readOnly && <ActionButton text="⇄" title="Change type" onClick={() => changeType(actions, block)} />}
-          {parent?.kind === 'object' && <ActionButton text="✎" title="Rename" onClick={() => rename(actions, block)} />}
+          {canChangeType(block) && <ActionButton text="⇄" title="Change type" onClick={() => changeType(actions, block)} />}
+          {canRename(block, parent) && <ActionButton text="✎" title="Rename" onClick={() => rename(actions, block)} />}
           {parent && !parent.readOnly && <ActionButton text="×" title="Remove" onClick={() => remove(actions, block)} />}
         </span>
       </div>
@@ -72,15 +72,20 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
   const highlight = useHighlight();
   const isContainer = child.children !== undefined;
   const collapsed = isContainer && actions.isCollapsed(child.id);
-  const canRename = node.kind === 'object';
-  // Rows of a read-only container (the list of YAML documents) can't be moved or removed.
+  const renamable = canRename(child, node);
+  // Rows of a read-only container (YAML documents, top-level HTML nodes) can't be moved or removed.
   const fixed = !!node.readOnly;
-  const accepts = () => !fixed && dragSource?.node.id === node.id;
+  // Attributes and element content are reordered separately: an attribute never moves among children.
+  const accepts = () => !fixed && dragSource?.node.id === node.id && moveGroup(dragSource.child) === moveGroup(child);
+  const siblings = node.children ?? [];
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (!fixed && e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
       e.preventDefault();
-      move(actions, child, node, index, index + (e.key === 'ArrowUp' ? -1 : 1));
+      const toIndex = index + (e.key === 'ArrowUp' ? -1 : 1);
+      if (siblings[toIndex] && moveGroup(siblings[toIndex]) === moveGroup(child)) {
+        move(actions, child, node, index, toIndex);
+      }
     }
   };
 
@@ -133,10 +138,10 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
         ⠿
       </span>
       <span
-        className={typeof child.label === 'number' ? 'row-index' : 'row-key'}
-        title={canRename ? 'Click to show in text · Double-click to rename' : 'Click to show in text'}
+        className={rowKeyClass(child)}
+        title={renamable ? 'Click to show in text · Double-click to rename' : 'Click to show in text'}
         onClick={() => reveal(actions, child)}
-        onDoubleClick={canRename ? () => rename(actions, child) : undefined}
+        onDoubleClick={renamable ? () => rename(actions, child) : undefined}
       >
         {rowLabel(child)}
       </span>
@@ -148,8 +153,8 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
         <ScalarInput block={child} />
       )}
       <span className="row-actions">
-        {!child.readOnly && <ActionButton text="⇄" title="Change type" onClick={() => changeType(actions, child)} />}
-        {canRename && <ActionButton text="✎" title="Rename" onClick={() => rename(actions, child)} />}
+        {canChangeType(child) && <ActionButton text="⇄" title="Change type" onClick={() => changeType(actions, child)} />}
+        {renamable && <ActionButton text="✎" title="Rename" onClick={() => rename(actions, child)} />}
         {!fixed && <ActionButton text="×" title="Remove" onClick={() => remove(actions, child)} />}
       </span>
       {isContainer && !collapsed && (
@@ -163,6 +168,30 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
       )}
     </div>
   );
+}
+
+/** JSON/YAML values can switch type; XML/HTML elements, attributes and text can't. */
+function canChangeType(block: Block): boolean {
+  return !block.readOnly && (block.kind === 'object' || block.kind === 'array' || block.kind === 'scalar');
+}
+
+/** Object keys, attribute names and tag names can be renamed. */
+function canRename(block: Block, parent: Block | undefined): boolean {
+  return !block.readOnly && (parent?.kind === 'object' || block.kind === 'element' || block.kind === 'attribute');
+}
+
+function moveGroup(block: Block): 'attribute' | 'content' {
+  return block.kind === 'attribute' ? 'attribute' : 'content';
+}
+
+function rowKeyClass(block: Block): string {
+  if (block.kind === 'attribute') {
+    return 'row-key row-key--attribute';
+  }
+  if (block.kind === 'element') {
+    return 'row-key row-key--element';
+  }
+  return typeof block.label === 'number' ? 'row-index' : 'row-key';
 }
 
 function matchClass(highlight: Highlight, block: Block): string {

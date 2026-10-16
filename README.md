@@ -34,10 +34,10 @@ src/
     types.ts                   interface FormatAdapter (parse + applyEdit)
     index.ts                   escolhe o adapter pelo languageId ou pela extensão
     textDiff.ts                reduz uma reescrita do texto ao trecho que mudou
+    textEdits.ts               edições textuais compartilhadas (rotacionar irmãos, indentação)
     jsonAdapter.ts             jsonc-parser + edições textuais que copiam a formatação existente
-    yamlAdapter.ts             yaml (Document API, preserva comentários)
-    xmlAdapter.ts              stub
-    htmlAdapter.ts             stub
+    yamlAdapter.ts             yaml (Document API, preserva comentários; vários documentos)
+    markupAdapter.ts           XML e HTML (htmlparser2 + leitor de tags com posições dos atributos)
 webview/                       React + React Flow
   main.tsx                     ponto de entrada
   App.tsx                      canvas, toolbar, estado (recolhidos) e mensagens
@@ -89,6 +89,12 @@ Tudo passa pelo documento, então **Ctrl+Z** desfaz qualquer ação.
 Dá para editar dentro de cada documento, e só o texto dele é regravado; os documentos em si não são
 removidos ou reordenados pelo grafo.
 
+**XML e HTML:** cada elemento vira um card `<tag>`; os atributos são linhas `@nome` e os textos
+linhas `#text`, editáveis. O **+** pergunta se é elemento filho, atributo ou texto; renomear uma tag
+muda a de abertura e a de fechamento. Comentários, `<?xml ?>` e `<!DOCTYPE>` não aparecem mas ficam
+no arquivo. Em HTML, tags com fechamento implícito (`<li>` sem `</li>`), atributos sem valor
+(`disabled`) e sem aspas (`class=list`) são respeitados.
+
 **Arquivos grandes:** na primeira abertura, se o grafo passar de 150 cards, só os primeiros níveis
 ficam expandidos (a toolbar avisa); a busca e o cursor do texto expandem o que for preciso. Acima de
 100 cards, o canvas só renderiza os cards visíveis.
@@ -103,7 +109,8 @@ ficam expandidos (a toolbar avisa); a busca e o cursor do texto expandem o que f
 - [x] Clicar num nó revela o trecho no editor de texto
 - [x] Performance com arquivos grandes (virtualização / recolher níveis profundos por padrão)
 - [ ] Virtualizar as linhas dentro de cards enormes (ex.: um array com milhares de itens)
-- [ ] XML e HTML com parser que guarda posições
+- [x] XML e HTML com parser que guarda posições
+- [ ] XML/HTML: mostrar elementos só com texto (`<li>JSON</li>`) como uma linha, sem card próprio
 - [x] Detecção de indentação no JSON
 - [x] YAML multi-documento
 - [x] Mudar o tipo de um valor (ex.: string → number)

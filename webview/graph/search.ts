@@ -1,11 +1,11 @@
 import type { Block } from '../../src/model/block';
-import { displayValue } from './buildGraph';
+import { blockName, displayValue } from './buildGraph';
 import type { GraphTarget } from './targets';
 
 export type SearchMatch = GraphTarget;
 
 /**
- * Case-insensitive search over string keys and scalar values, in document order.
+ * Case-insensitive search over names (object keys, attribute and tag names) and values, in document order.
  * Array indexes are not matched: searching "1" would otherwise hit every second item.
  */
 export function findMatches(root: Block, query: string): SearchMatch[] {
@@ -16,8 +16,9 @@ export function findMatches(root: Block, query: string): SearchMatch[] {
   }
 
   const visit = (block: Block, parent: Block | undefined, row: number) => {
-    const keyHit = typeof block.label === 'string' && block.label.toLowerCase().includes(needle);
-    const valueHit = block.kind === 'scalar' && displayValue(block).toLowerCase().includes(needle);
+    const keyHit = blockName(block)?.toLowerCase().includes(needle) ?? false;
+    // Scalars, attributes and text all carry a value.
+    const valueHit = block.children === undefined && displayValue(block).toLowerCase().includes(needle);
     if (keyHit || valueHit) {
       matches.push({ block, card: parent ?? block, row });
     }

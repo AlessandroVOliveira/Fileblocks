@@ -1,10 +1,12 @@
-import { htmlAdapter } from './htmlAdapter';
 import { jsonAdapter } from './jsonAdapter';
+import { createMarkupAdapter } from './markupAdapter';
 import type { FormatAdapter } from './types';
-import { xmlAdapter } from './xmlAdapter';
 import { yamlAdapter } from './yamlAdapter';
 
 export type { FormatAdapter, ParseResult, TextChange } from './types';
+
+const xmlAdapter = createMarkupAdapter('xml');
+const htmlAdapter = createMarkupAdapter('html');
 
 const byLanguageId: Record<string, FormatAdapter> = {
   json: jsonAdapter,
