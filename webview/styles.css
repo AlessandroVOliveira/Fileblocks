@@ -406,3 +406,7 @@ button:focus-visible {
 .row-key--element {
   color: var(--vscode-symbolIcon-classForeground, var(--vscode-editor-foreground));
 }
+
+.row-void {
+  flex: 1;
+}

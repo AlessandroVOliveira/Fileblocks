@@ -199,15 +199,35 @@ function elementBlock(text: string, element: Element, path: BlockPath, label: nu
       range: { offset: attribute.nameStart, length: attribute.end - attribute.nameStart },
     };
   });
-  return {
+  const base = {
     id: pathToId(path),
-    kind: 'element',
+    kind: 'element' as const,
     path,
     label,
     caption: info.tagName,
-    children: [...attributes, ...contentNodes(element).map((node, i) => contentBlock(text, node, [...path, i], i))],
     range: { offset: element.startIndex!, length: info.end - element.startIndex! },
   };
+
+  // Inline elements (`<li>JSON</li>`, `<a/>`, `<br>`) have no card of their own: they are a row
+  // of the parent card whose value is their text. Void elements have no value at all.
+  const content = contentNodes(element);
+  const inline = textOnlyContent(info, content);
+  if (attributes.length === 0 && inline !== undefined) {
+    return { ...base, value: inline.editable ? inline.text : undefined };
+  }
+  return { ...base, children: [...attributes, ...content.map((node, i) => contentBlock(text, node, [...path, i], i))] };
+}
+
+/** The element's text when its content is a single text node or nothing; undefined if it has child elements. */
+function textOnlyContent(info: ElementInfo, content: (Element | Text)[]): { text: string; editable: boolean } | undefined {
+  if (content.length === 1 && isText(content[0])) {
+    return { text: content[0].data.trim(), editable: true };
+  }
+  if (content.length === 0) {
+    // `<a/>` and `<a></a>` can take text; void elements (`<br>`) and implied-end empties can't.
+    return { text: '', editable: info.selfClosing || info.closeName !== undefined };
+  }
+  return undefined;
 }
 
 function textBlock(text: string, node: Text, path: BlockPath, index: number): Block {
@@ -289,6 +309,9 @@ function applyMarkupEdit(text: string, doc: DomDocument, edit: BlockEdit, xmlMod
       if (target?.type === 'text') {
         return [replace(target.span.start, target.span.end, escapeText(value))];
       }
+      if (target?.type === 'element') {
+        return setElementText(text, target.node, target.info, escapeText(value));
+      }
       return undefined;
     }
 
@@ -361,6 +384,23 @@ function applyMarkupEdit(text: string, doc: DomDocument, edit: BlockEdit, xmlMod
       return rotateSpans(text, spans, target.index, edit.toIndex - attributeCount);
     }
   }
+}
+
+/** Sets the text of an inline element (one text node or empty); elements with child elements are refused. */
+function setElementText(text: string, element: Element, info: ElementInfo, escaped: string): TextChange[] | undefined {
+  const content = contentNodes(element);
+  if (content.length === 1 && isText(content[0])) {
+    const span = nodeSpan(text, content[0])!;
+    return [replace(span.start, span.end, escaped)];
+  }
+  if (content.length > 0) {
+    return undefined;
+  }
+  if (info.selfClosing || info.closeName) {
+    // Same as appending text to an empty element: `<a/>` -> `<a>text</a>`, `<a></a>` -> `<a>text</a>`.
+    return escaped === '' ? [] : appendContent(text, element, info, escaped, false);
+  }
+  return undefined;
 }
 
 /** Appends a child at the end of an element, following the layout of its existing children. */

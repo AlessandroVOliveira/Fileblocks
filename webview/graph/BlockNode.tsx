@@ -149,10 +149,17 @@ function Row({ child, node, index }: { child: Block; node: Block; index: number 
         <button className="row-summary" title={collapsed ? 'Expand' : 'Collapse'} onClick={() => actions.toggleCollapsed(child.id)}>
           {summary(child)} {collapsed ? '▸' : '▾'}
         </button>
+      ) : child.value === undefined ? (
+        // Void element (<br>): just the tag, nothing to edit.
+        <span className="row-void" />
       ) : (
         <ScalarInput block={child} />
       )}
       <span className="row-actions">
+        {child.kind === 'element' && !child.readOnly && (
+          // Inline element (no card of its own): adding an attribute or child gives it a card.
+          <ActionButton text="+" title="Add child, attribute or text" onClick={() => actions.post({ type: 'add', parentPath: child.path })} />
+        )}
         {canChangeType(child) && <ActionButton text="⇄" title="Change type" onClick={() => changeType(actions, child)} />}
         {renamable && <ActionButton text="✎" title="Rename" onClick={() => rename(actions, child)} />}
         {!fixed && <ActionButton text="×" title="Remove" onClick={() => remove(actions, child)} />}

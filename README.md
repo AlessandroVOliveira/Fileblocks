@@ -90,7 +90,9 @@ Dá para editar dentro de cada documento, e só o texto dele é regravado; os do
 removidos ou reordenados pelo grafo.
 
 **XML e HTML:** cada elemento vira um card `<tag>`; os atributos são linhas `@nome` e os textos
-linhas `#text`, editáveis. O **+** pergunta se é elemento filho, atributo ou texto; renomear uma tag
+linhas `#text`, editáveis. Elementos sem atributos que só têm texto (`<li>JSON</li>`) ou estão vazios
+(`<a/>`, `<br>`) não ganham card: são uma linha do card pai com o texto editável; o **+** da linha
+adiciona atributo ou filho (e aí o elemento passa a ter card). O **+** pergunta se é elemento filho, atributo ou texto; renomear uma tag
 muda a de abertura e a de fechamento. Comentários, `<?xml ?>` e `<!DOCTYPE>` não aparecem mas ficam
 no arquivo. Em HTML, tags com fechamento implícito (`<li>` sem `</li>`), atributos sem valor
 (`disabled`) e sem aspas (`class=list`) são respeitados.
@@ -110,7 +112,7 @@ ficam expandidos (a toolbar avisa); a busca e o cursor do texto expandem o que f
 - [x] Performance com arquivos grandes (virtualização / recolher níveis profundos por padrão)
 - [ ] Virtualizar as linhas dentro de cards enormes (ex.: um array com milhares de itens)
 - [x] XML e HTML com parser que guarda posições
-- [ ] XML/HTML: mostrar elementos só com texto (`<li>JSON</li>`) como uma linha, sem card próprio
+- [x] XML/HTML: mostrar elementos só com texto (`<li>JSON</li>`) como uma linha, sem card próprio
 - [x] Detecção de indentação no JSON
 - [x] YAML multi-documento
 - [x] Mudar o tipo de um valor (ex.: string → number)

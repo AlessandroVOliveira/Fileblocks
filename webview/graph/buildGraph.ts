@@ -105,7 +105,11 @@ export function summary(block: Block): string {
 }
 
 export function displayValue(block: Block): string {
-  return block.value === null || block.value === undefined ? 'null' : String(block.value);
+  if (block.value === undefined) {
+    // Valueless rows: void elements such as <br>.
+    return '';
+  }
+  return block.value === null ? 'null' : String(block.value);
 }
 
 function nodeWidth(block: Block, measure: Measure): number {

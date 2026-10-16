@@ -44,7 +44,7 @@ test('ranges cover elements, attributes and trimmed text', () => {
   assert.equal(slice(source, findBlock(root, [0, '@email'])), 'email="jane@example.com"');
   assert.equal(slice(source, findBlock(root, [0, 0])), 'Jane &amp; co');
   assert.equal(slice(source, findBlock(root, [1, 1])), '<tag>yaml</tag>');
-  assert.deepEqual(findBlockAt(root, source.indexOf('yaml'))?.path, [1, 1, 0]);
+  assert.deepEqual(findBlockAt(root, source.indexOf('yaml'))?.path, [1, 1]);
 });
 
 test('setValue edits attribute values and text, escaping them', () => {
@@ -113,4 +113,44 @@ test('HTML: implied end tags, valueless and unquoted attributes, tag case', () =
   assert.equal(edit(html, page, { type: 'rename', path: [1], newKey: 'div' }), page.replace('<P>', '<div>').replace('</P>', '</div>'));
   assert.equal(edit(html, page, { type: 'insert', parentPath: [1], key: 'i', value: {} }), page.replace('<b>there</b>', '<b>there</b><i></i>'));
   assert.equal(html.applyEdit(page, { type: 'insert', parentPath: [0, 0], key: 'span', value: {} }), undefined);
+});
+
+test('text-only and empty elements are inline rows with their text as value', () => {
+  const { root } = xml.parse(source);
+  const tag = findBlock(root, [1, 1])!;
+  assert.equal(tag.kind, 'element');
+  assert.equal(tag.children, undefined);
+  assert.equal(tag.value, 'yaml');
+  assert.equal(findBlock(root, [2])?.value, '');
+  assert.equal(findBlock(root, [3])?.value, '');
+  // Elements with attributes keep their card, even with only text inside.
+  assert.ok(findBlock(root, [0])?.children);
+
+  assert.equal(edit(xml, source, { type: 'setValue', path: [1, 1], value: 'yml & co' }), source.replace('<tag>yaml</tag>', '<tag>yml &amp; co</tag>'));
+  assert.equal(edit(xml, source, { type: 'setValue', path: [2], value: 'x' }), source.replace('<empty/>', '<empty>x</empty>'));
+  assert.equal(edit(xml, source, { type: 'setValue', path: [3], value: 'y' }), source.replace('<none></none>', '<none>y</none>'));
+  assert.deepEqual(xml.applyEdit(source, { type: 'setValue', path: [3], value: '' }), []);
+  assert.equal(xml.applyEdit(source, { type: 'setValue', path: [1], value: 'x' }), undefined);
+});
+
+test('HTML inline elements: implied end tags, void elements', () => {
+  const doc = `<div>
+  <ul>
+    <li>One
+    <li>Two</li>
+  </ul>
+  <br>
+  <p>Hi <b>there</b></p>
+</div>`;
+  const { root } = html.parse(doc);
+  assert.equal(findBlock(root, [0, 0])?.value, 'One');
+  assert.equal(findBlock(root, [0, 1])?.value, 'Two');
+  assert.equal(findBlock(root, [1])?.value, undefined);
+  assert.equal(findBlock(root, [1])?.children, undefined);
+  assert.ok(findBlock(root, [2])?.children, 'mixed content keeps its card');
+  assert.equal(findBlock(root, [2, 1])?.value, 'there');
+  assert.equal(edit(html, doc, { type: 'setValue', path: [0, 0], value: 'Uno' }), doc.replace('<li>One', '<li>Uno'));
+  assert.equal(html.applyEdit(doc, { type: 'setValue', path: [1], value: 'x' }), undefined);
+  // Adding an attribute to an inline element works (it then gets a card).
+  assert.equal(edit(html, doc, { type: 'insert', parentPath: [2, 1], key: '@class', value: '' }), doc.replace('<b>', '<b class="">'));
 });
