@@ -1,0 +1,75 @@
+{
+  "name": "fileblocks",
+  "displayName": "Fileblocks",
+  "description": "Visual block editor for structured files (JSON, YAML, XML, HTML).",
+  "version": "0.0.1",
+  "publisher": "fileblocks-dev",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Visualization",
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "customEditors": [
+      {
+        "viewType": "fileblocks.blockEditor",
+        "displayName": "Fileblocks",
+        "priority": "option",
+        "selector": [
+          { "filenamePattern": "*.json" },
+          { "filenamePattern": "*.jsonc" },
+          { "filenamePattern": "*.yaml" },
+          { "filenamePattern": "*.yml" },
+          { "filenamePattern": "*.xml" },
+          { "filenamePattern": "*.html" },
+          { "filenamePattern": "*.htm" }
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "command": "fileblocks.openBlockEditor",
+        "title": "Open in Block Editor",
+        "category": "Fileblocks",
+        "icon": "$(symbol-structure)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "fileblocks.openBlockEditor",
+          "when": "resourceExtname =~ /^\\.(json|jsonc|ya?ml|xml|html?)$/ && activeCustomEditorId != 'fileblocks.blockEditor'",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "fileblocks.openBlockEditor",
+          "when": "resourceExtname =~ /^\\.(json|jsonc|ya?ml|xml|html?)$/",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "vscode:prepublish": "node esbuild.mjs --production",
+    "package": "npx @vscode/vsce package"
+  },
+  "dependencies": {
+    "jsonc-parser": "^3.3.1",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.90.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.6.0"
+  }
+}

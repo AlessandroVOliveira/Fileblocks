@@ -1,0 +1,119 @@
+/* Uses VS Code theme variables so the editor follows the active color theme. */
+
+body {
+  padding: 0 16px 16px;
+  color: var(--vscode-editor-foreground);
+  background: var(--vscode-editor-background);
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+}
+
+.toolbar {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  background: var(--vscode-editor-background);
+  z-index: 1;
+}
+
+.format-badge {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--vscode-badge-foreground);
+  background: var(--vscode-badge-background);
+}
+
+.toolbar-button {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: none;
+  border-radius: 2px;
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+  cursor: pointer;
+}
+
+.toolbar-button:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.errors {
+  margin: 0 0 8px;
+  padding: 8px 8px 8px 24px;
+  border-left: 3px solid var(--vscode-editorError-foreground);
+  color: var(--vscode-editorError-foreground);
+  background: var(--vscode-inputValidation-errorBackground);
+}
+
+.block {
+  margin: 4px 0;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  background: var(--vscode-sideBar-background);
+}
+
+.block--scalar {
+  border-style: dashed;
+}
+
+.block-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+}
+
+.block-children {
+  padding: 0 6px 4px 20px;
+}
+
+.block-toggle {
+  width: 18px;
+  padding: 0;
+  border: none;
+  color: inherit;
+  background: none;
+  cursor: pointer;
+}
+
+.block-key {
+  font-weight: 600;
+  color: var(--vscode-symbolIcon-propertyForeground, var(--vscode-editor-foreground));
+}
+
+.block-index {
+  color: var(--vscode-descriptionForeground);
+}
+
+.block-summary {
+  color: var(--vscode-descriptionForeground);
+  font-family: var(--vscode-editor-font-family);
+}
+
+.block-value {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--vscode-input-border, transparent);
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  font-family: var(--vscode-editor-font-family);
+}
+
+.block-value--boolean {
+  flex: none;
+}
+
+.block-value--number {
+  color: var(--vscode-debugTokenExpression-number, var(--vscode-input-foreground));
+}
+
+.block-value--null {
+  font-style: italic;
+  color: var(--vscode-descriptionForeground);
+}

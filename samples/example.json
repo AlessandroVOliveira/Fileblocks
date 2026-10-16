@@ -1,0 +1,15 @@
+{
+  "name": "fileblocks-demo",
+  "version": 3,
+  "private": true,
+  "description": null,
+  "author": {
+    "name": "Jane Doe",
+    "email": "jane@example.com"
+  },
+  "tags": ["json", "yaml", "blocks"],
+  "servers": [
+    { "host": "localhost", "port": 8080, "secure": false },
+    { "host": "api.example.com", "port": 443, "secure": true }
+  ]
+}

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="fileblocks-demo" version="3">
+  <author email="jane@example.com">Jane Doe</author>
+  <tags>
+    <tag>json</tag>
+    <tag>yaml</tag>
+    <tag>blocks</tag>
+  </tags>
+  <servers>
+    <server host="localhost" port="8080" secure="false"/>
+    <server host="api.example.com" port="443" secure="true"/>
+  </servers>
+</project>
